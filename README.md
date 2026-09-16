@@ -20,16 +20,32 @@ PacBio 공식 워크플로우 **[HiFi-somatic-WDL](https://github.com/PacificBio
 - CNV/purity·ploidy: Wakhan
 - 메틸화: pb-CpG-tools → DSS 로 tumor vs normal DMR
 
-우리 쪽에서 달라진 점:
+우리 쪽에서 달라진 점은 **실행 방식과 샘플 구성 처리** 세 가지다:
 
 | 항목 | HiFi-somatic-WDL | 이 저장소 |
 |---|---|---|
 | 실행 엔진 | WDL (miniwdl / Cromwell) | Snakemake + SLURM 제출 스크립트 |
-| 종양 샘플 | tumor-only 또는 tumor/normal 1쌍 | 환자당 **종양 샘플 여러 개** (PRIMARY/META 등)를 Severus multimode 로 동시 분석 |
-| 샘플 관리 | 샘플별 입력 JSON | `samples.tsv` 한 장으로 다환자·다샘플 일괄 |
-| CNV | cnvkit / PURPLE / Wakhan | SAVANA + Wakhan |
-| 시각화 | Severus cluster plot (HTML) | 자체 circos 스크립트(`scripts/circosplot.py`)로 SV·fusion circos |
-| 생식세포 변이 | - | Clair3 + HiPhase 페이징 결과를 함께 산출 |
+| 종양 샘플 구성 | 샘플 단위로 tumor-only 또는 tumor/normal 1쌍 | 환자당 **종양 샘플 여러 개**(PRIMARY/META 등)를 Severus multimode 로 한 번에 분석 |
+| 다환자 처리 | 샘플별 입력 JSON 을 각각 작성 | `samples.tsv` 한 장으로 다환자·다샘플 일괄, 환자 추가는 줄 추가 |
+
+분석 내용 자체(도구 선택, 필터링, 주석 전략)는 원본을 그대로 따랐다.
+
+### 아직 가져오지 않은 원본 기능
+
+원본은 이 저장소보다 분석 범위가 넓다. 아래는 원본에 있고 여기에는 **아직 구현하지 않은** 것들이다.
+
+| 기능 | 원본이 쓰는 도구 | 비고 |
+|---|---|---|
+| HRD (상동재조합결핍) 예측 | CHORD v2.0.0 | 유방암·난소암 연구에서 특히 아쉬운 항목 |
+| MSI 프로파일/스코어 | owl v0.4.0 | |
+| TMB 추정 | tmb-calculator (+ Gencode CDS) | VEP 주석 결과 기반 |
+| Mutational signature | MutationalPatterns 3.10.0 | |
+| purity/ploidy + allele-specific CNV | PURPLE v4.0 (Amber/Cobalt) | jar 와 수동 실행 스크립트는 보유, rule 미구현 |
+| CNV segmentation 대안 | CNVkit 0.9.10 | |
+| 요약 HTML 리포트 | 자체 리포팅 스크립트 | |
+| 정렬 통계 요약 | seqkit / csvtk | read length, per-alignment stats |
+| tumor-only 모드 | - | 이 저장소는 정상 샘플이 반드시 필요 |
+| SNV caller 대안 | ClairS | 여기서는 DeepSomatic 만 사용 |
 
 원본 워크플로우의 라이선스와 인용은 [HiFi-somatic-WDL 저장소](https://github.com/PacificBiosciences/HiFi-somatic-WDL)를 따른다.
 
@@ -152,7 +168,8 @@ LONG_READ_DNA_WGS/
 
 - 환자 1명(정상 1 + 종양 1) 기준 **입력 uBAM 만 약 1 TB**, 중간·최종 산출물까지 합치면 **2~3 TB** 의 작업 공간이 필요하다.
 - 종양이 원발+전이 2개인 환자는 입력만 1.4~1.7 TB 수준.
-- 14 샘플 코호트 실측 합계: uBAM 약 7.0 TB, 전체(raw + 납품 BAM 포함) 약 16.8 TB.
+
+작업 공간을 미리 확보하지 않으면 매핑 단계에서 디스크가 차서 중간에 죽기 때문에 적어둔다.
 
 ## 검증 이력
 

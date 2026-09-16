@@ -1,0 +1,58 @@
+# Long-read 암 게놈 분석 워크플로우 설정 파일
+# repo 에 포함된 소형 파일은 scripts/, resources/ 아래 있고,
+# 대용량 참조 데이터(ref/vep_cache/container/annotsv/mitelman)는 resource/ 에 직접 준비해야 함 (.gitignore 대상)
+# 샘플 정보는 samples_file에서 읽어들임
+
+# 샘플 정보 파일
+samples_file: "samples.tsv"  # patient_id, sample_type, bam_path 컬럼을 가진 TSV 파일
+
+# 참조 파일
+reference_fasta: "resource/ref/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"  # 참조 게놈
+vep_cache: "resource/vep_cache/homo_sapiens_refseq_vep_112_GRCh38.tar.gz"          # VEP 주석 캐시 파일
+vntr_bed: "resource/severus/human_GRCh38_no_alt_analysis_set.trf.bed"  # VNTR BED 파일
+compendium_file: "resource/intogen_genelist/Compendium_Cancer_Genes_2024-9-30.tsv"  # 암 유전자 정보
+annotsv_cache: "resource/annotsv/annotsv_cache.tar.gz"  # AnnotSV 주석 캐시
+
+# 컨테이너 경로
+clair3_container: "resource/container/clair3_latest.sif"        # Clair3 싱귤래리티 이미지
+deepsomatic_container: "resource/container/deepsomatic_1.8.0.sif"  # DeepSomatic 싱귤래리티 이미지
+savana_container: "resource/container/savana_1.3.4.sif"        # SAVANA 싱귤래리티 이미지
+wakhan_container: "resource/container/wakhan_latest.sif"        # Wakhan 싱귤래리티 이미지
+
+# 계산 자원 (4노드 × 96스레드 × 500GB 활용)
+threads: 96                  # 대부분의 작업에 사용할 스레드 수 (최대 활용)
+threads_low: 24              # 경량 작업에 사용할 스레드 수
+
+# 출력 디렉토리
+output_dir: "results"        # 결과 파일이 저장될 디렉토리
+
+# SV 분석 리소스
+contig_bed: "resources/chr.bed"  # 필터링할 contig 목록
+svpack_script: "scripts/svpack.py"  # SVpack 스크립트 경로
+mitelman_mcgene: "resource/circos/mitel"  # Mitelman 데이터베이스
+circos_config: "resources/hg38.bed"  # Circos 설정
+cytoband_file: "resources/hg38_cytoband.tsv"  # 염색체 밴드 정보
+
+#SVPACK
+reference_gff: "resource/svpack/Homo_sapiens.GRCh38.112.chr.reformatted.gff3"
+svpack_match_vcf: "resource/svpack/severus.jasmine.AN10.AC4.nosample.vcf.gz"
+
+# 메틸화 분석 설정
+methylation_min_coverage: 5   # 최소 커버리지 (기본값: 5)
+methylation_min_mapq: 1       # 최소 매핑 품질 (기본값: 1)
+
+# CNV 분석 설정
+# SAVANA 설정
+savana_min_supp: 3             # SAVANA 최소 support reads
+savana_min_af: 0.05            # SAVANA 최소 allele frequency
+savana_svlength: 50            # SAVANA 최소 SV 길이
+
+# Wakhan 설정  
+wakhan_purity_range: "0.2-1.0"  # Wakhan purity 범위
+wakhan_ploidy_range: "1-6"      # Wakhan ploidy 범위
+
+# DSS 차등 메틸화 분석 설정
+dss_smoothing: true          # 스무딩 적용 여부
+dss_delta: 0.1              # 최소 메틸화 차이 임계값
+dss_pvalue: 0.01            # p-value 임계값
+

@@ -1,0 +1,6 @@
+patient_id	sample_type	bam_path
+PT101	NORMAL	/path/to/PT101_N.hifi_reads.bam
+PT101	PRIMARY	/path/to/PT101_primary_1.hifi_reads.bam
+PT101	PRIMARY	/path/to/PT101_primary_2.hifi_reads.bam
+PT101	META	/path/to/PT101_meta_1.hifi_reads.bam
+PT101	META	/path/to/PT101_meta_2.hifi_reads.bam

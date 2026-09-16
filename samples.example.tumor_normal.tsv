@@ -1,0 +1,6 @@
+patient_id	sample_type	bam_path
+PT001	NORMAL	/path/to/PT001_N.hifi_reads.bam
+PT001	TUMOR	/path/to/PT001_T_1.hifi_reads.bam
+PT001	TUMOR	/path/to/PT001_T_2.hifi_reads.bam
+PT002	NORMAL	/path/to/PT002_N.hifi_reads.bam
+PT002	TUMOR	/path/to/PT002_T.hifi_reads.bam

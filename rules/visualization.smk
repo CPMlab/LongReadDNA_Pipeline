@@ -1,4 +1,4 @@
-# Visualisation and annotation rules
+# Visualization and annotation rules
 
 # 1. Circos plot (multi-sample)
 rule circosplot:

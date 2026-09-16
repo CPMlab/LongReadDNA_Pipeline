@@ -80,7 +80,7 @@ results/
     ├── mapping/                PT101.<TYPE>.aligned.bam
     ├── qc/                     PT101.<TYPE>.mosdepth.summary.txt, regions.bed.gz
     ├── snv/                    Clair3 germline, DeepSomatic somatic VCFs
-    ├── phasing/                HiPhase BAM/VCF, normalised VCFs
+    ├── phasing/                HiPhase BAM/VCF, normalized VCFs
     ├── annotation/             PT101.NORMAL.germline.vep.vcf.gz
     │                           PT101.<TUMOR>.somatic.vep.vcf.gz
     ├── sv/                     severus_PT101/, svpack_PT101/, recovered_PT101/
@@ -128,7 +128,7 @@ single somatic SV VCF covers the patient, with one genotype column per tumor. Sh
 breakpoints therefore stay directly comparable, and the circos step splits that VCF per tumor while
 also writing a combined fusion table (`<patient>_fusion_calls_combined.tsv`).
 
-If you would rather analyse the tumors completely independently, give them different `patient_id`
+If you would rather analyze the tumors completely independently, give them different `patient_id`
 values instead of different sample types — but then each one needs its own `NORMAL` row and the SVs
 are no longer called jointly.
 

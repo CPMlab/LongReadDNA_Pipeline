@@ -237,7 +237,7 @@ rule hiphase_tumor:
         echo "End time: $(date)" >> {log}
         """
 
-# 5. Normalising the phased normal VCF
+# 5. Normalizing the phased normal VCF
 rule normalize_normal_vcf:
     input:
         vcf = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.NORMAL.hiphase.vcf.gz"),
@@ -253,7 +253,7 @@ rule normalize_normal_vcf:
         # Create the log directory
         mkdir -p $(dirname {log})
         
-        echo "=== VCF normalisation start: {wildcards.patient}.NORMAL ===" > {log}
+        echo "=== VCF normalization start: {wildcards.patient}.NORMAL ===" > {log}
         echo "Start time: $(date)" >> {log}
         echo "Input VCF: {input.vcf}" >> {log}
         echo "Output VCF: {output.vcf}" >> {log}
@@ -262,8 +262,8 @@ rule normalize_normal_vcf:
         echo "Indexing the VCF" >> {log}
         bcftools index --threads {threads} {input.vcf} >> {log} 2>&1
         
-        # Run normalisation
-        echo "Normalising the VCF" >> {log}
+        # Run normalization
+        echo "Normalizing the VCF" >> {log}
         bcftools view {input.vcf} | \
           sed -e 's/ID=AD,Number=\\./ID=AD,Number=R/' | \
           bcftools norm --threads {threads} --multiallelics - \
@@ -271,15 +271,15 @@ rule normalize_normal_vcf:
           bcftools sort -Oz -o {output.vcf} \
           2>> {log}
         
-        # Index the normalised VCF
-        echo "Indexing the normalised VCF" >> {log}
+        # Index the normalized VCF
+        echo "Indexing the normalized VCF" >> {log}
         bcftools index --threads {threads} -t {output.vcf} >> {log} 2>&1
         
-        echo "=== VCF normalisation done ===" >> {log}
+        echo "=== VCF normalization done ===" >> {log}
         echo "End time: $(date)" >> {log}
         """
 
-# 6. Normalising the phased tumor VCF
+# 6. Normalizing the phased tumor VCF
 rule normalize_tumor_vcf:
     input:
         vcf = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.{tumor_sample_type}.somatic.hiphase.vcf.gz"),
@@ -297,7 +297,7 @@ rule normalize_tumor_vcf:
         # Create the log directory
         mkdir -p $(dirname {log})
         
-        echo "=== Tumor VCF normalisation start: {wildcards.patient}.{wildcards.tumor_sample_type} ===" > {log}
+        echo "=== Tumor VCF normalization start: {wildcards.patient}.{wildcards.tumor_sample_type} ===" > {log}
         echo "Start time: $(date)" >> {log}
         echo "Input VCF: {input.vcf}" >> {log}
         echo "Output VCF: {output.vcf}" >> {log}
@@ -306,8 +306,8 @@ rule normalize_tumor_vcf:
         echo "Indexing the VCF" >> {log}
         bcftools index --threads {threads} {input.vcf} >> {log} 2>&1
         
-        # Run normalisation
-        echo "Normalising the VCF" >> {log}
+        # Run normalization
+        echo "Normalizing the VCF" >> {log}
         bcftools view {input.vcf} | \
           sed -e 's/ID=AD,Number=\\./ID=AD,Number=R/' | \
           bcftools norm --threads {threads} --multiallelics - \
@@ -315,10 +315,10 @@ rule normalize_tumor_vcf:
           bcftools sort -Oz -o {output.vcf} \
           2>> {log}
         
-        # Index the normalised VCF
-        echo "Indexing the normalised VCF" >> {log}
+        # Index the normalized VCF
+        echo "Indexing the normalized VCF" >> {log}
         bcftools index --threads {threads} -t {output.vcf} >> {log} 2>&1
         
-        echo "=== Tumor VCF normalisation done ===" >> {log}
+        echo "=== Tumor VCF normalization done ===" >> {log}
         echo "End time: $(date)" >> {log}
         """ 

@@ -1,174 +1,178 @@
-# 멀티오믹스 암 게놈 분석 파이프라인 설치 가이드
+# Installation
 
-## 📋 목차
-1. [기본 환경 설치](#1-기본-환경-설치)
-2. [Conda 환경 생성](#2-conda-환경-생성)
-3. [컨테이너 이미지 다운로드](#3-컨테이너-이미지-다운로드)
-4. [리소스 파일 준비](#4-리소스-파일-준비)
-5. [설치 확인](#5-설치-확인)
+## Contents
 
-## 1. 기본 환경 설치
+1. [Requirements](#1-requirements)
+2. [Conda environment](#2-conda-environment)
+3. [Container images](#3-container-images)
+4. [Reference data](#4-reference-data)
+5. [HMFtools (PURPLE) setup](#5-hmftools-purple-setup)
+6. [Verifying the installation](#6-verifying-the-installation)
+7. [Notes and troubleshooting](#7-notes-and-troubleshooting)
 
-### 필수 요구사항
-- **OS**: Linux (Ubuntu 18.04+ 또는 CentOS 7+ 권장)
-- **메모리**: 최소 64GB RAM (128GB+ 권장)
-- **저장공간**: 최소 2TB (참조 데이터 + 분석 결과)
-- **CPU**: 48+ cores 권장
+## 1. Requirements
 
-### Conda/Mamba 설치
+- **OS**: Linux (RHEL 8/9, Ubuntu 20.04+)
+- **Memory**: 64 GB minimum, 128 GB+ recommended (500 GB+ for the full cohort runs we do)
+- **Disk**: 2–3 TB of working space per patient, plus ~60 GB for reference data and containers
+- **CPU**: 48+ cores recommended
+- **Java**: 11 or later, required by the HMFtools jars (Amber/Cobalt/PURPLE)
+- **Singularity / Apptainer**: version 3 or later
+
+On a module-based cluster, load Singularity first:
+
 ```bash
-# Miniforge 설치 (mamba 포함)
-curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
-bash Miniforge3-$(uname)-$(uname -m).sh
-
-# 또는 Miniconda 설치 후 mamba 설치
-conda install -c conda-forge mamba
+module load Program/singularity-4.2.2    # adjust to your cluster
 ```
 
-## 2. Conda 환경 생성
+### Conda / Mamba
 
 ```bash
-# 1. 파이프라인 디렉토리로 이동
-cd snakemake_v1.1_250605_denovo
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+bash Miniforge3-$(uname)-$(uname -m).sh
+```
 
-# 2. Conda 환경 생성 (시간이 오래 걸릴 수 있음)
+## 2. Conda environment
+
+```bash
+cd LONG_READ_DNA_WGS
 mamba env create -f env.yaml
-
-# 3. 환경 활성화
 conda activate long_read_pipeline
 
-# 4. 설치 확인
 snakemake --version
 samtools --version
 ```
 
-## 3. 컨테이너 이미지 다운로드
-
-### 필요한 Singularity 이미지들
+## 3. Container images
 
 ```bash
-# 컨테이너 디렉토리 생성
 mkdir -p resource/container
 
-# Clair3 이미지
-singularity pull resource/container/clair3_latest.sif docker://hkubal/clair3:latest
+# --- variant calling / SV / CNV ---
+singularity pull resource/container/clair3_latest.sif      docker://hkubal/clair3:latest
+singularity pull resource/container/deepsomatic_1.8.0.sif  docker://google/deepsomatic:1.8.0
+singularity pull resource/container/savana_1.3.4.sif       docker://quay.io/biocontainers/savana
+singularity pull resource/container/wakhan_latest.sif      docker://mkolmogo/wakhan:dev_c717baa
 
-# DeepSomatic 이미지  
-singularity pull resource/container/deepsomatic_1.8.0.sif docker://google/deepsomatic:1.8.0
-
-# SAVANA 이미지
-singularity pull resource/container/savana_latest.sif docker://quay.io/biocontainers/savana
-
-# Wakhan 이미지
-singularity pull resource/container/wakhan_latest.sif docker://mkolmogo/wakhan:dev_c717baa
+# --- biomarkers ---
+# Digests pinned to the versions used by HiFi-somatic-WDL.
+singularity pull resource/container/chord.sif \
+  docker://scwatts/chord@sha256:9f6aa44ffefe3f736e66a0e2d7941d4f3e1cc6d848a9a11a17e85a6525e63a77
+singularity pull resource/container/somatic_r_tools.sif \
+  docker://quay.io/pacbio/somatic_r_tools@sha256:68dc04908a37e26b30dc9795fa6cc0e85a238c8695afe805ad164a071193fb48
+singularity pull resource/container/owl.sif \
+  docker://quay.io/pacbio/owl@sha256:753b83abe1fb5d8c4f1e2e4ef200bfbecf1a342827ab4974a0d271911675461d
+singularity pull resource/container/tmb_calculator.sif \
+  docker://quay.io/pacbio/tmb_calculator@sha256:93f89b7f2777bb27fc7e8ba5fb0b54a56c132c7b5a5b3f01b95696b5b0b3b63b
 ```
 
-### 이미지 용량 확인
+Expect roughly 17 GB in total. Point a large cache directory at Singularity before pulling if `/tmp`
+is small:
+
 ```bash
-ls -lh resource/container/
-# 예상 총 용량: ~10-15GB
+export SINGULARITY_CACHEDIR=$HOME/singularity_cache
+export SINGULARITY_TMPDIR=$SINGULARITY_CACHEDIR/tmp
+mkdir -p "$SINGULARITY_TMPDIR"
 ```
 
-## 4. 리소스 파일 준비
+## 4. Reference data
 
-### 4.1 참조 게놈 (필수)
+### 4.1 Reference genome (required)
+
 ```bash
 mkdir -p resource/ref
-
-# GRCh38 참조 게놈 다운로드
 wget -O resource/ref/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta.gz \
   "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta.gz"
-
 gunzip resource/ref/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta.gz
-
-# 인덱스 생성
 samtools faidx resource/ref/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta
 ```
 
-### 4.2 VEP 캐시 (필수)
+### 4.2 VEP cache (required)
+
 ```bash
 mkdir -p resource/vep_cache
-
-# VEP 캐시 다운로드 (약 15GB)
 wget -O resource/vep_cache/homo_sapiens_refseq_vep_112_GRCh38.tar.gz \
   "https://ftp.ensembl.org/pub/release-112/variation/indexed_vep_cache/homo_sapiens_refseq_vep_112_GRCh38.tar.gz"
 ```
 
-### 4.3 AnnotSV 캐시 (필수)
+### 4.3 AnnotSV annotations (required)
+
 ```bash
 mkdir -p resource/annotsv
-
-# AnnotSV 주석 데이터 다운로드
 wget -O resource/annotsv/annotsv_cache.tar.gz \
   "https://www.lbgi.fr/~geoffroy/Annotations/AnnotSV_annotations_3.4.tar.gz"
 ```
 
-### 4.4 기타 필수 리소스
+`scripts/install_annotsv_annotations.sh` unpacks it into the layout AnnotSV expects.
+
+### 4.4 Other resources
+
 ```bash
-# VNTR BED 파일
+# Severus VNTR BED
 mkdir -p resource/severus
 wget -O resource/severus/human_GRCh38_no_alt_analysis_set.trf.bed \
   "https://github.com/KolmogorovLab/Severus/raw/main/resources/human_GRCh38_no_alt_analysis_set.trf.bed"
 
-# Contig BED 파일
-mkdir -p resource/tabix
-echo -e "chr1\nchr2\nchr3\nchr4\nchr5\nchr6\nchr7\nchr8\nchr9\nchr10\nchr11\nchr12\nchr13\nchr14\nchr15\nchr16\nchr17\nchr18\nchr19\nchr20\nchr21\nchr22\nchrX\nchrY" > resource/tabix/chr.bed
-
-# 암 유전자 목록
+# IntOGen Compendium of Cancer Genes — download from https://www.intogen.org
 mkdir -p resource/intogen_genelist
-# IntOGen Compendium Cancer Genes 파일 필요 (사용자가 직접 다운로드)
+
+# Mitelman database MCGENE dump (used to flag known fusions in the circos plot)
+# https://mitelmandatabase.isb-cgc.org  -> place the MCGENE table at resource/circos/mitel
+mkdir -p resource/circos
 ```
 
-## 5. 설치 확인
+`resources/chr.bed`, `resources/hg38.bed` and `resources/hg38_cytoband.tsv` are already in this
+repository; no download needed.
 
-### 5.1 기본 도구 확인
+## 5. HMFtools (PURPLE) setup
+
+PURPLE runs from local jars rather than a container.
+
 ```bash
-# 환경 활성화
+mkdir -p resource/purple
+# Amber, Cobalt and PURPLE jars (HMFtools releases)
+#   https://github.com/hartwigmedical/hmftools
+# The pipeline was validated with:
+#   amber-4.0-jar-with-dependencies.gamma1000.jar
+#   cobalt-1.16.0-jar-with-dependencies.jar
+#   purple-4.0-jar-with-dependencies.jar
+
+# GRCh38 resource bundle (~9 GB), from the HMF resource release:
+#   hmf_pipeline_resources.38_v2.0.0--3.tar.gz
+```
+
+Place all four files in `resource/purple/` and check the paths in `config.yaml`
+(`amber_jar`, `cobalt_jar`, `purple_jar`, `hmf_resources_tarball`). The workflow unpacks the bundle
+once into `results/shared/hmf_resources/` and reuses it for every sample.
+
+## 6. Verifying the installation
+
+```bash
 conda activate long_read_pipeline
 
-# 주요 도구들 확인
 pbmm2 --version
 samtools --version
 bcftools --version
 hiphase --version
 severus --version
 aligned_bam_to_cpg_scores --version
-Rscript --version
-```
+java -version
+Rscript -e "library(DSS); library(annotatr); sessionInfo()"
 
-### 5.2 컨테이너 확인
-```bash
-# 컨테이너 이미지 확인
 singularity run resource/container/clair3_latest.sif /opt/bin/run_clair3.sh --version
 singularity run resource/container/deepsomatic_1.8.0.sif run_deepsomatic --version
+
+# Finally, a dry run against your own samples.tsv
+snakemake -n --cores 4
 ```
 
-### 5.3 R 패키지 확인
-```bash
-Rscript -e "library(DSS); library(annotatr); sessionInfo()"
-```
+## 7. Notes and troubleshooting
 
-### 5.4 드라이런 테스트
-```bash
-# 샘플 데이터로 드라이런 실행
-snakemake -n --configfile config.yaml
-```
-
-## 📝 주의사항
-
-1. **메모리 사용량**: 일부 단계(특히 매핑과 변이 검출)에서 많은 메모리를 사용합니다.
-2. **디스크 공간**: 중간 파일들이 많이 생성되므로 충분한 저장공간이 필요합니다.
-3. **실행 시간**: 전체 파이프라인 실행에는 하루 이상 소요될 수 있습니다.
-4. **네트워크**: 리소스 파일 다운로드에 안정적인 인터넷 연결이 필요합니다.
-
-## 🆘 문제 해결
-
-### 일반적인 문제들
-1. **conda 패키지 충돌**: `mamba env create --force -f env.yaml`로 재설치
-2. **컨테이너 오류**: Singularity 버전 확인 및 권한 설정
-3. **메모리 부족**: config.yaml에서 스레드 수 조정
-4. **R 패키지 오류**: `conda install -c bioconda r-*` 개별 설치
-
-### 도움 요청
-- GitHub Issues
-- Snakemake 공식 문서: https://snakemake.readthedocs.io/ 
+- **Memory**: alignment and variant calling are the heavy steps; lower `threads` in `config.yaml`
+  if jobs are killed by the scheduler.
+- **Runtime**: a full cohort run takes more than a day.
+- **Disk**: intermediates are large — see the input data scale section in the README.
+- **Conda conflicts**: recreate with `mamba env create --force -f env.yaml`.
+- **Broken console scripts after a home directory move**: conda environments hardcode absolute paths
+  in shebangs. Call the module directly instead — `<env>/bin/python -m snakemake`.
+- **Container errors**: check the Singularity version and that `--bind` covers your working directory.

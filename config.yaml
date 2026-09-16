@@ -56,3 +56,34 @@ dss_smoothing: true          # 스무딩 적용 여부
 dss_delta: 0.1              # 최소 메틸화 차이 임계값
 dss_pvalue: 0.01            # p-value 임계값
 
+
+# ---------------------------------------------------------------------------
+# PURPLE (HMFtools) — purity / ploidy / allele-specific CNV
+# jar 와 참조 tarball 준비 방법은 docs/INSTALLATION.md 참조
+# ---------------------------------------------------------------------------
+amber_jar: "resource/purple/amber-4.0-jar-with-dependencies.gamma1000.jar"
+cobalt_jar: "resource/purple/cobalt-1.16.0-jar-with-dependencies.jar"
+purple_jar: "resource/purple/purple-4.0-jar-with-dependencies.jar"
+hmf_resources_tarball: "resource/purple/hmf_pipeline_resources.38_v2.0.0--3.tar.gz"
+
+purple_java_mem: "60G"       # java -Xmx
+cobalt_pcf_gamma: 1000       # Cobalt segmentation gamma
+purple_min_purity: 0.08
+purple_max_purity: 0.99
+purple_min_ploidy: 1
+purple_max_ploidy: 8
+
+# ---------------------------------------------------------------------------
+# 바이오마커 (HRD / mutational signature / MSI / TMB)
+# ---------------------------------------------------------------------------
+chord_container: "resource/container/chord.sif"                      # HRD 예측
+somatic_r_tools_container: "resource/container/somatic_r_tools.sif"   # MutationalPatterns
+owl_container: "resource/container/owl.sif"                          # MSI
+tmb_container: "resource/container/tmb_calculator.sif"               # TMB
+
+mutsig_max_delta: 0.004      # MutationalPatterns bootstrap max delta
+msi_min_depth: 5             # owl score 최소 depth
+tmb_min_depth: 10            # TMB: 변이 최소 depth
+tmb_min_coverage: 10         # TMB: 영역 최소 coverage
+tmb_min_vaf: 0.10            # TMB: 최소 VAF
+tmb_gnomad_max_af: 0.01      # TMB: gnomAD AF 상한 (이보다 흔하면 제외)

@@ -1,114 +1,77 @@
 # LONG_READ_DNA_WGS
 
-PacBio HiFi long-read WGS 기반 **암 게놈 (tumor/normal) 통합 분석 Snakemake 파이프라인**.
-SNV/indel · 구조변이 · copy number · 메틸화/DMR 까지 한 번에 돌리고, 환자별로 결과를 정리한다.
+A Snakemake workflow for somatic cancer genome analysis from **PacBio HiFi whole-genome sequencing**
+(tumor/normal). It covers small variants, structural variants, copy number, purity/ploidy,
+CpG methylation and differential methylation, and clinical biomarkers (HRD, MSI, TMB,
+mutational signatures) — organised per patient.
 
-> A Snakemake workflow for PacBio HiFi whole-genome tumor/normal cancer analysis:
-> SNV/indel calling, structural variants, copy number, CpG methylation and DMR, with per-patient outputs.
-
-## 이 파이프라인의 출발점
-
-PacBio 공식 워크플로우 **[HiFi-somatic-WDL](https://github.com/PacificBiosciences/HiFi-somatic-WDL)**
-(tumor-only / matched tumor-normal somatic variant calling for HiFi reads)를 참고해서, 같은 분석 설계를
-우리 클러스터(SLURM + conda + Singularity) 환경에 맞게 **Snakemake 로 재구성한 것**이다.
-
-원본에서 그대로 가져온 설계:
-
-- 체세포 SNV/indel: DeepSomatic → VEP 주석 → IntOGen Cancer Gene(CCG) 교차
-- 구조변이: Severus → 필터링 → AnnotSV 주석 → IntOGen CCG 교차
-- Mitelman database 기반 fusion 표시
-- CNV/purity·ploidy: Wakhan
-- 메틸화: pb-CpG-tools → DSS 로 tumor vs normal DMR
-
-우리 쪽에서 달라진 점은 **실행 방식과 샘플 구성 처리** 세 가지다:
-
-| 항목 | HiFi-somatic-WDL | 이 저장소 |
-|---|---|---|
-| 실행 엔진 | WDL (miniwdl / Cromwell) | Snakemake + SLURM 제출 스크립트 |
-| 종양 샘플 구성 | 샘플 단위로 tumor-only 또는 tumor/normal 1쌍 | 환자당 **종양 샘플 여러 개**(PRIMARY/META 등)를 Severus multimode 로 한 번에 분석 |
-| 다환자 처리 | 샘플별 입력 JSON 을 각각 작성 | `samples.tsv` 한 장으로 다환자·다샘플 일괄, 환자 추가는 줄 추가 |
-
-분석 내용 자체(도구 선택, 필터링, 주석 전략)는 원본을 그대로 따랐다.
-
-### 아직 가져오지 않은 원본 기능
-
-원본은 이 저장소보다 분석 범위가 넓다. 아래는 원본에 있고 여기에는 **아직 구현하지 않은** 것들이다.
-
-| 기능 | 원본이 쓰는 도구 | 비고 |
-|---|---|---|
-| HRD (상동재조합결핍) 예측 | CHORD v2.0.0 | 유방암·난소암 연구에서 특히 아쉬운 항목 |
-| MSI 프로파일/스코어 | owl v0.4.0 | |
-| TMB 추정 | tmb-calculator (+ Gencode CDS) | VEP 주석 결과 기반 |
-| Mutational signature | MutationalPatterns 3.10.0 | |
-| purity/ploidy + allele-specific CNV | PURPLE v4.0 (Amber/Cobalt) | jar 와 수동 실행 스크립트는 보유, rule 미구현 |
-| CNV segmentation 대안 | CNVkit 0.9.10 | |
-| 요약 HTML 리포트 | 자체 리포팅 스크립트 | |
-| 정렬 통계 요약 | seqkit / csvtk | read length, per-alignment stats |
-| tumor-only 모드 | - | 이 저장소는 정상 샘플이 반드시 필요 |
-| SNV caller 대안 | ClairS | 여기서는 DeepSomatic 만 사용 |
-
-원본 워크플로우의 라이선스와 인용은 [HiFi-somatic-WDL 저장소](https://github.com/PacificBiosciences/HiFi-somatic-WDL)를 따른다.
+The analysis design follows PacBio's
+**[HiFi-somatic-WDL](https://github.com/PacificBiosciences/HiFi-somatic-WDL)**; this repository
+re-implements it in Snakemake for a SLURM + conda + Singularity cluster, and extends it to handle
+several tumor samples per patient (for example primary and metastasis) in a single run.
 
 ---
 
-## 특징
+## How it works
 
-- **samples.tsv 한 장으로 제어** — 환자 수, 샘플 타입, BAM 경로만 적으면 나머지는 자동.
-- **종양 샘플 타입 자유** — `TUMOR/NORMAL` 페어든 `PRIMARY/META` 다중 종양이든 그대로 동작한다.
-  `Snakefile` 이 samples.tsv 에서 종양 타입을 읽어 wildcard 제약(`TUMOR_TYPE_CONSTRAINT`)을 자동 생성하므로,
-  데이터셋마다 파이프라인을 복제할 필요가 없다.
-- **Severus multimode** — NORMAL 을 control 로 두고 여러 종양 샘플을 동시에 SV 분석.
-- **여러 환자 동시 처리** — 환자별 디렉토리로 결과가 분리된다. 새 환자는 samples.tsv 에 줄만 추가.
-- 같은 `patient_id + sample_type` 이 여러 줄이면(= 여러 SMRT cell) 자동으로 병합한다.
-
-## 워크플로우
+You describe your cohort in one `samples.tsv` — patient, sample type, BAM path — and the workflow
+does the rest. Every sample type other than `NORMAL` is treated as a tumor sample, so the same code
+runs a plain tumor/normal pair and a primary + metastasis patient without any change.
 
 ![workflow rulegraph](docs/figures/rulegraph.png)
 
-*rule 단위 워크플로우. 환자 1명(정상 1 + 종양 1) 기준 job 단위 DAG 는
-[docs/figures/dag_tumor_normal.png](docs/figures/dag_tumor_normal.png) 참고.*
+### Pipeline steps
 
-| 단계 | 도구 | rule |
+| Stage | Tool | Rule |
 |---|---|---|
-| 매핑 | pbmm2 | `mapping` |
-| 커버리지 QC | mosdepth | `mosdepth` |
-| 생식세포 변이 | Clair3 (container) | `clair3` |
-| 체세포 변이 | DeepSomatic (container) | `deepsomatic` |
-| 페이징 | HiPhase | `hiphase_normal`, `hiphase_tumor` |
-| VCF 정규화 | bcftools | `normalize_*_vcf` |
-| 변이 주석 | VEP | `vep_annotate_normal`, `vep_annotate_somatic` |
-| 구조변이 | Severus (multimode) | `severus_multimode` |
-| SV 필터/후처리 | SVpack, mate-BND 복구 | `tabix_filter`, `svpack`, `recover_mate_bnd` |
-| SV 주석 | AnnotSV + IntOGen CCG | `annotsv`, `sv_intogen` |
-| CNV / purity·ploidy | SAVANA, Wakhan (container) | `savana_sv`, `wakhan_cnv` |
-| 메틸화 | pb-CpG-tools | `cpg_methylation` |
-| 차등 메틸화 | DSS + annotatr | `dss_dmr`, `annotate_dmr` |
-| 시각화 | circosplot (자체 스크립트) | `circosplot`, `collect_sample_circos` |
+| Alignment | pbmm2 | `mapping` |
+| Coverage QC | mosdepth | `mosdepth` |
+| Germline small variants | Clair3 | `clair3` |
+| Somatic small variants | DeepSomatic | `deepsomatic` |
+| Phasing | HiPhase | `hiphase_normal`, `hiphase_tumor` |
+| VCF normalisation | bcftools | `normalize_normal_vcf`, `normalize_tumor_vcf` |
+| Variant annotation | VEP | `vep_annotate_normal`, `vep_annotate_somatic` |
+| Structural variants | Severus (multimode) | `severus_multimode` |
+| SV filtering | tabix, SVpack, mate-BND recovery | `tabix_filter`, `svpack`, `recover_mate_bnd` |
+| SV annotation | AnnotSV + IntOGen cancer genes | `annotsv`, `sv_intogen` |
+| Copy number | SAVANA, Wakhan | `savana_sv`, `wakhan_cnv` |
+| Purity / ploidy / allele-specific CN | Amber → Cobalt → PURPLE (HMFtools) | `purple_amber`, `purple_cobalt`, `purple` |
+| HRD prediction | CHORD | `chord_hrd` |
+| Mutational signatures | MutationalPatterns | `mutational_signature` |
+| MSI | owl | `owl_msi_profile`, `owl_msi_score` |
+| TMB | tmb-calculator | `tmb_estimate` |
+| Methylation | pb-CpG-tools | `cpg_methylation` |
+| Differential methylation | DSS + annotatr | `dss_dmr`, `annotate_dmr` |
+| Visualisation | circos (bundled script) | `circosplot`, `collect_sample_circos` |
 
-## 빠른 시작
+Severus runs in multimode: the normal sample is the control and every tumor sample of that patient
+is analysed together, so SVs shared between primary and metastasis stay comparable.
+
+## Quick start
 
 ```bash
-# 1. 환경 (자세한 내용은 docs/INSTALLATION.md)
+# 1. Environment (details in docs/INSTALLATION.md)
 mamba env create -f env.yaml
 conda activate long_read_pipeline
 
-# 2. 샘플 정보 작성
-cp samples.example.tumor_normal.tsv samples.tsv   # 또는 samples.example.multi_tumor.tsv
+# 2. Describe your samples
+cp samples.example.tumor_normal.tsv samples.tsv    # or samples.example.multi_tumor.tsv
 vi samples.tsv
 
-# 3. 참조 데이터 경로 확인
+# 3. Point config.yaml at your reference data and containers
 vi config.yaml
 
-# 4. dry-run 으로 계획 확인
-snakemake -n --cores 8
+# 4. Check the plan before running anything
+snakemake -n --cores 4
 
-# 5. 실행 (SLURM)
+# 5. Run (SLURM)
 sbatch slurm/run_snakemake.sh
-# 특정 환자만
+
+# ...or a single patient
 bash slurm/run_patient.sh PT001 96
 ```
 
-## samples.tsv 형식
+## Sample sheet
 
 ```tsv
 patient_id	sample_type	bam_path
@@ -117,90 +80,85 @@ PT001	TUMOR	/path/to/PT001_T_1.hifi_reads.bam
 PT001	TUMOR	/path/to/PT001_T_2.hifi_reads.bam
 ```
 
-- `sample_type` 에서 **`NORMAL` 은 예약어**(control), 나머지는 전부 종양 샘플로 취급된다.
-- 따라서 `TUMOR`, `PRIMARY`, `META`, `RELAPSE` 등 원하는 이름을 쓰면 되고, 환자마다 NORMAL 은 반드시 있어야 한다.
-- 실제 `samples.tsv` 는 환자 식별 정보를 담을 수 있어 `.gitignore` 로 커밋에서 제외되어 있다. 예시 파일만 저장소에 포함된다.
+- `NORMAL` is reserved for the control sample and is required for every patient.
+- Any other label (`TUMOR`, `PRIMARY`, `META`, `RELAPSE`, …) is treated as a tumor sample.
+- Repeating a `patient_id` + `sample_type` (one line per SMRT cell) merges those BAMs during alignment.
+- To add a patient, add rows — existing results are untouched and only the new patient is processed.
+- `samples.tsv` is gitignored because it holds patient identifiers; only the anonymised examples are tracked.
 
-## 디렉토리 구조
+## Output layout
 
 ```
-LONG_READ_DNA_WGS/
-├── Snakefile                        # 메인 워크플로우 (샘플 로딩 + rule all)
-├── config.yaml                      # 경로/파라미터 설정
-├── env.yaml                         # conda 환경
-├── samples.example.*.tsv            # 샘플 시트 예시 2종
-├── rules/                           # 단계별 rule (mapping, variant_calling, ...)
-├── scripts/                         # 자체 스크립트 (circosplot.py, DSS/annotatr R, svpack.py)
-├── resources/                       # 소형 참조 파일 (chr.bed, hg38.bed, cytoband)
-├── slurm/                           # SLURM 제출 스크립트
-└── docs/                            # 설치 · 사용법 · 운영 가이드
+results/
+└── PT001/
+    ├── mapping/         aligned BAMs
+    ├── qc/              mosdepth coverage
+    ├── snv/             Clair3 germline, DeepSomatic somatic
+    ├── phasing/         HiPhase BAM/VCF, normalised VCFs
+    ├── annotation/      VEP-annotated germline and somatic VCFs
+    ├── sv/              Severus → SVpack → AnnotSV, IntOGen hits, circos
+    ├── cnv/             SAVANA, Wakhan, PURPLE (purity_ploidy.tsv)
+    ├── biomarkers/      CHORD HRD, mutational signatures, MSI, TMB
+    ├── methylation/     pb-CpG-tools 5mC
+    ├── dmr/             DSS differential methylation (tumor vs normal)
+    └── logs/
 ```
 
-## 별도로 준비해야 하는 대용량 리소스
+## Input data scale
 
-저장소에는 코드와 소형 참조 파일만 들어 있다. 아래는 `resource/` 아래에 직접 준비해야 하며(`.gitignore` 대상),
-설치 절차는 [docs/INSTALLATION.md](docs/INSTALLATION.md) 참조.
+Input is **unaligned BAM** (`*.hifi_reads.bam`) straight from the instrument. From our breast cancer
+WGS cohort (~30x): roughly 200–370 GB per SMRT cell, so about **1 TB of input for one
+normal + tumor patient**, and 2–3 TB of working space once intermediates and results are included.
+Worth checking before a run — the alignment step is where a full disk usually stops the pipeline.
 
-| config 키 | 내용 | 대략 크기 |
+## Reference data to prepare
+
+Only code and small reference files are tracked here. The following go under `resource/`
+(gitignored) — see [docs/INSTALLATION.md](docs/INSTALLATION.md) for how to fetch them.
+
+| config key | Content | Approx. size |
 |---|---|---|
 | `reference_fasta` | GRCh38 no-alt analysis set | ~3 GB |
-| `vep_cache` | VEP 112 RefSeq 캐시 | ~26 GB |
-| `annotsv_cache` | AnnotSV annotation | ~5 GB |
-| `*_container` | Clair3 / DeepSomatic / SAVANA / Wakhan 이미지 | ~11 GB |
+| `vep_cache` | VEP 112 RefSeq cache | ~26 GB |
+| `annotsv_cache` | AnnotSV annotations | ~5 GB |
+| `clair3/deepsomatic/savana/wakhan_container` | Variant calling images | ~11 GB |
+| `chord/somatic_r_tools/owl/tmb_container` | Biomarker images | ~6 GB |
+| `amber/cobalt/purple_jar`, `hmf_resources_tarball` | HMFtools jars + GRCh38 resources | ~9 GB |
 | `vntr_bed` | Severus VNTR BED | ~7 MB |
-| `svpack_match_vcf`, `reference_gff` | SVpack 대조 VCF, GFF3 | ~700 MB |
+| `svpack_match_vcf`, `reference_gff` | SVpack control VCF, GFF3 | ~700 MB |
 | `compendium_file` | IntOGen Compendium Cancer Genes | ~1 MB |
-| `mitelman_mcgene` | Mitelman DB MCGENE 덤프 (fusion 표시용) | ~4 MB |
+| `mitelman_mcgene` | Mitelman database MCGENE dump | ~4 MB |
 
-## 입력 데이터 규모 (참고)
+## Validation
 
-입력은 PacBio Revio 에서 나온 **unaligned BAM (`*.hifi_reads.bam`, uBAM)** 이다. 같은 샘플이 여러 SMRT cell 로
-나뉘어 있으면 `samples.tsv` 에 줄을 여러 개 적으면 `mapping` rule 이 합쳐서 정렬한다.
+Run end to end on a breast cancer long-read cohort: three tumor/normal pairs and two patients with
+primary + metastasis samples. These were previously two separate copies of the pipeline
+(`TUMOR/NORMAL` and `PRIMARY/META`); they are merged here into one, and both configurations were
+confirmed to build a complete DAG after the merge.
 
-실제 운영 중인 유방암 코호트(WGS, 30x 내외) 기준 실측치:
+| Configuration | Jobs |
+|---|---|
+| 1 normal + 1 tumor | 28 |
+| 1 normal + primary + metastasis | 40 |
+| the above, with PURPLE and biomarkers | 57 |
 
-| 항목 | 샘플당 | 비고 |
-|---|---|---|
-| uBAM (`*.hifi_reads.bam`) | **약 200~370 GB / SMRT cell** | 종양은 보통 2 cell → 600~700 GB |
-| HiFi fastq.gz | 약 30~50 GB / cell | uBAM 이 있으면 파이프라인에 불필요 |
-| fail_reads BAM | 약 40~60 GB | 분석에 사용하지 않음 |
-| 정렬 후 haplotagged BAM | 약 240~760 GB | 파이프라인 산출물 |
+## Not included
 
-- 환자 1명(정상 1 + 종양 1) 기준 **입력 uBAM 만 약 1 TB**, 중간·최종 산출물까지 합치면 **2~3 TB** 의 작업 공간이 필요하다.
-- 종양이 원발+전이 2개인 환자는 입력만 1.4~1.7 TB 수준.
+Compared with HiFi-somatic-WDL, this repository does not implement CNVkit segmentation, the summary
+HTML report, seqkit/csvtk alignment statistics, tumor-only mode, or ClairS as an alternative somatic
+caller (DeepSomatic only).
 
-작업 공간을 미리 확보하지 않으면 매핑 단계에서 디스크가 차서 중간에 죽기 때문에 적어둔다.
+## Credits
 
-## 검증 이력
+- Workflow design: [HiFi-somatic-WDL](https://github.com/PacificBiosciences/HiFi-somatic-WDL) (PacBio) — please
+  follow its licence and citations when using this workflow.
+- `scripts/svpack.py` from PacBio [svpack](https://github.com/PacificBiosciences/svpack).
+- `scripts/circosplot.py`, `scripts/DSS_tumor_normal.R`, `scripts/annotatr_dmr.R` are part of this repository.
+- IntOGen Compendium of Cancer Genes and the Mitelman Database are redistributed under their own terms and
+  are not bundled here.
 
-유방암 long-read 코호트(정상–종양 페어 3명, 원발–전이 다중 종양 2명)에서 전 단계 완주로 검증했다.
-`TUMOR/NORMAL` 구성과 `PRIMARY/META` 구성 두 갈래로 따로 유지하던 파이프라인을 이 저장소에서 한 벌로 합쳤고,
-통합 후 Snakemake 7.32.4 dry-run 으로 두 구성 모두 DAG 가 정상 생성되는 것을 확인했다.
+## Documentation
 
-| 구성 | samples.tsv | 생성된 job |
-|---|---|---|
-| 정상 1 + 종양 1 | `samples.example.tumor_normal.tsv` 형식 | 28 |
-| 정상 1 + 원발 + 전이 | `samples.example.multi_tumor.tsv` 형식 | 40 |
-
-```bash
-# 실제로 돌리기 전에 항상 이걸로 확인
-snakemake -n --cores 4
-```
-
-## 알려진 이슈 / 패치 노트
-
-- **SAVANA v1.3.0**: 옵션명이 `--phased_vcf` → `--snp_vcf` 로 변경됨. rule 이 새 옵션명을 사용한다.
-- **pb-CpG-tools v3.0.0**: 출력에 헤더 라인이 생겨 DSS 입력에서 깨졌다. 헤더를 제거하고 넘기는 방식으로 정리했다.
-- DMR 주석 산출물은 파일명이 버전에 따라 달라져서 glob 으로 찾아 이동시킨다.
-
-## 외부 코드 / 데이터 출처
-
-- `scripts/svpack.py` — PacBio [svpack](https://github.com/PacificBiosciences/svpack) 에서 가져옴.
-- `scripts/DSS_tumor_normal.R`, `scripts/annotatr_dmr.R`, `scripts/circosplot.py` — 본 파이프라인 자체 스크립트.
-- Mitelman Database, IntOGen Compendium 은 각 배포처 라이선스를 따르며 저장소에 포함하지 않는다.
-
-## 문서
-
-- [docs/USAGE.md](docs/USAGE.md) — 샘플 시트 작성, 단계별 실행, 출력 구조
-- [docs/OPERATIONS.md](docs/OPERATIONS.md) — 실행/모니터링/트러블슈팅
-- [docs/INSTALLATION.md](docs/INSTALLATION.md) — 환경 · 컨테이너 · 참조 데이터 설치
+- [docs/USAGE.md](docs/USAGE.md) — sample sheet, running specific stages, output structure
+- [docs/OPERATIONS.md](docs/OPERATIONS.md) — running, monitoring, troubleshooting
+- [docs/INSTALLATION.md](docs/INSTALLATION.md) — environment, containers, reference data

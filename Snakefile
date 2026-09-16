@@ -99,6 +99,8 @@ include: "rules/structural_variants.smk"
 include: "rules/visualization.smk"
 include: "rules/methylation.smk"
 include: "rules/copy_number.smk"
+include: "rules/purple.smk"
+include: "rules/biomarkers.smk"
 
 rule all:
     input:
@@ -132,6 +134,25 @@ rule all:
         [join(OUTPUT_DIR, patient, "cnv", f"wakhan_{patient}_{tumor_type}", f"{patient}.{tumor_type}.copynumbers_segments.bed") 
          for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
         [join(OUTPUT_DIR, patient, "cnv", f"wakhan_{patient}_{tumor_type}", "purity_ploidy.tsv") 
+         for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
+        # PURPLE purity/ploidy 및 allele-specific CNV (종양 샘플들)
+        [join(OUTPUT_DIR, patient, "cnv", f"purple_{patient}_{tumor_type}", "purity_ploidy.tsv")
+         for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
+        [join(OUTPUT_DIR, patient, "cnv", f"purple_{patient}_{tumor_type}", "purple", f"{patient}.{tumor_type}.purple.cnv.somatic.tsv")
+         for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
+        # HRD 예측 (CHORD)
+        [join(OUTPUT_DIR, patient, "biomarkers", f"{patient}.{tumor_type}_chord_prediction.txt")
+         for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
+        # Mutational signature (MutationalPatterns)
+        [join(OUTPUT_DIR, patient, "biomarkers", f"{patient}.{tumor_type}.mut_sigs.tsv")
+         for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
+        # MSI (owl)
+        [join(OUTPUT_DIR, patient, "biomarkers", f"{patient}.{tumor_type}.owl-scores.txt")
+         for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
+        # TMB
+        [join(OUTPUT_DIR, patient, "biomarkers", f"{patient}.{tumor_type}.tmb_estimate.json")
+         for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
+        [join(OUTPUT_DIR, patient, "biomarkers", f"{patient}.{tumor_type}.tmb_estimate.gencode_coding.json")
          for patient, tumor_type in ALL_TUMOR_COMBINATIONS],
         # 차등 메틸화 분석 결과 (DSS - 종양 샘플들)
         [join(OUTPUT_DIR, patient, "dmr", f"{patient}.{tumor_type}_vs_NORMAL.DMR.tsv") 

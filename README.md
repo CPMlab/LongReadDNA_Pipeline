@@ -47,6 +47,11 @@ PacBio 공식 워크플로우 **[HiFi-somatic-WDL](https://github.com/PacificBio
 
 ## 워크플로우
 
+![workflow rulegraph](docs/figures/rulegraph.png)
+
+*rule 단위 워크플로우. 환자 1명(정상 1 + 종양 1) 기준 job 단위 DAG 는
+[docs/figures/dag_tumor_normal.png](docs/figures/dag_tumor_normal.png) 참고.*
+
 | 단계 | 도구 | rule |
 |---|---|---|
 | 매핑 | pbmm2 | `mapping` |

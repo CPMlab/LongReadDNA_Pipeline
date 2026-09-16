@@ -1,11 +1,11 @@
 #!/bin/bash
-# 특정 환자 한 명만 분석 (samples.tsv 에서 sample_type 자동 인식)
-# 사용법: bash slurm/run_patient.sh PATIENT_ID [CORES]
+# Run a single patient; sample types are read from samples.tsv
+# Usage: bash slurm/run_patient.sh PATIENT_ID [CORES]
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-    echo "사용법: $0 PATIENT_ID [CORES]"
-    echo "예시: $0 PT001 96"
+    echo "Usage: $0 PATIENT_ID [CORES]"
+    echo "Example: $0 PT001 96"
     exit 1
 fi
 
@@ -25,14 +25,14 @@ TMP_DIR="${TMP_BASE:-$HOME/tmp}/${PATIENT_ID}_$$"
 mkdir -p "${TMP_DIR}"
 
 if [ ! -f "${SAMPLES_TSV}" ]; then
-    echo "❌ ${SAMPLES_TSV} 파일을 찾을 수 없습니다!"
+    echo "ERROR: ${SAMPLES_TSV} not found"
     exit 1
 fi
 
-# 이 환자의 샘플 타입 목록 (NORMAL + 종양 타입들)
+# Sample types of this patient (NORMAL plus tumor types)
 mapfile -t SAMPLE_TYPES < <(awk -F'\t' -v p="${PATIENT_ID}" 'NR>1 && $1==p {print $2}' "${SAMPLES_TSV}" | sort -u)
 if [ ${#SAMPLE_TYPES[@]} -eq 0 ]; then
-    echo "❌ 환자 ${PATIENT_ID} 를 ${SAMPLES_TSV} 에서 찾을 수 없습니다!"
+    echo "ERROR: patient ${PATIENT_ID} not found in ${SAMPLES_TSV}"
     exit 1
 fi
 
@@ -41,12 +41,12 @@ for st in "${SAMPLE_TYPES[@]}"; do
     [ "$st" != "NORMAL" ] && TUMOR_TYPES+=("$st")
 done
 
-echo "=== 환자별 분석: ${PATIENT_ID} ==="
-echo "샘플 타입: ${SAMPLE_TYPES[*]}"
-echo "종양 타입: ${TUMOR_TYPES[*]}"
-echo "시작 시간: $(date)"
+echo "=== Single-patient run: ${PATIENT_ID} ==="
+echo "Sample types: ${SAMPLE_TYPES[*]}"
+echo "Tumor types: ${TUMOR_TYPES[*]}"
+echo "Start time: $(date)"
 
-# 분석 타겟 구성
+# Build the target list
 TARGETS=()
 for st in "${SAMPLE_TYPES[@]}"; do
     TARGETS+=("${OUTPUT_DIR}/${PATIENT_ID}/mapping/${PATIENT_ID}.${st}.aligned.bam")
@@ -61,7 +61,7 @@ for tt in "${TUMOR_TYPES[@]}"; do
     TARGETS+=("${OUTPUT_DIR}/${PATIENT_ID}/dmr/${PATIENT_ID}.${tt}_vs_NORMAL.annotated_DMR.tsv.gz")
 done
 
-echo "분석 타겟: ${#TARGETS[@]}개 파일"
+echo "Targets: ${#TARGETS[@]} files"
 
 snakemake --unlock --directory "${WORK_DIR}"
 
@@ -82,15 +82,15 @@ snakemake \
 EXIT_CODE=$?
 set -e
 
-echo "=== 환자 ${PATIENT_ID} 분석 종료 (코드: ${EXIT_CODE}) ==="
-echo "종료 시간: $(date)"
+echo "=== Finished ${PATIENT_ID} (exit code: ${EXIT_CODE}) ==="
+echo "End time: $(date)"
 if [ ${EXIT_CODE} -eq 0 ]; then
-    echo "✅ 완료. 결과 위치: ${OUTPUT_DIR}/${PATIENT_ID}/"
+    echo "Done. Results: ${OUTPUT_DIR}/${PATIENT_ID}/"
     for target in "${TARGETS[@]}"; do
-        [ -f "${target}" ] && echo "  ✅ ${target}" || echo "  ❌ ${target} (생성되지 않음)"
+        [ -f "${target}" ] && echo "  OK ${target}" || echo "  MISSING ${target}"
     done
 else
-    echo "❌ 분석 중 오류가 발생했습니다."
+    echo "The run failed."
 fi
 
 rm -rf "${TMP_DIR}"

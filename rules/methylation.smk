@@ -1,13 +1,13 @@
 # Updated Snakemake rules for CpG methylation, DMR calling, and annotation
-# 주요 변경 사항
-#   1. shell 블록 내부의 `cd` 사용 제거 → 절대경로 기반으로 처리
-#   2. set -euo pipefail 추가로 오류 발생 시 즉시 중단
-#   3. 작업용 임시 파일·로그·출력 디렉터리 변수화(OUT_DIR)로 경로 명확화
-#   4. R 스크립트가 결과를 현재 작업 디렉터리에 생성하는 특성을 고려해
-#      OUT_DIR 내에서 생성하도록 prefix 전달 & 사후 mv 로 최종 출력 보장
+# Notable changes
+#   1. No `cd` inside the shell block; absolute paths are used instead
+#   2. set -euo pipefail so failures stop immediately
+#   3. Temp/log/output paths go through OUT_DIR variables
+#   4. The R script writes into the current directory, so a prefix is passed
+#      and the result is moved into place afterwards
 
 #######################################################################
-# 1) CpG 메틸화 스코어 계산
+# 1. CpG methylation scores
 #######################################################################
 rule cpg_methylation:
     input:
@@ -31,12 +31,12 @@ rule cpg_methylation:
         r"""
         set -euo pipefail
 
-        # 결과 디렉터리 확보
+        # Make sure the output directory exists
         mkdir -p "$(dirname {params.output_prefix})"
         mkdir -p "$(dirname {log})"
 
-        echo "CpG 메틸화 추출 시작: {wildcards.patient}.{wildcards.sample_type}" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "CpG methylation start: {wildcards.patient}.{wildcards.sample_type}" > {log}
+        echo "Start time: $(date)" >> {log}
 
         aligned_bam_to_cpg_scores --version >> {log} 2>&1
 
@@ -49,12 +49,12 @@ rule cpg_methylation:
           --min-coverage {params.min_coverage} \
           >> {log} 2>&1
 
-        echo "CpG 메틸화 추출 완료: {wildcards.patient}.{wildcards.sample_type}" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "CpG methylation done: {wildcards.patient}.{wildcards.sample_type}" >> {log}
+        echo "End time: $(date)" >> {log}
         """
 
 #######################################################################
-# 2) DSS 차등 메틸화 영역 분석 (종양 vs 정상)
+# 2. DSS differentially methylated regions (tumor vs normal)
 #######################################################################
 rule dss_dmr:
     input:
@@ -82,17 +82,17 @@ rule dss_dmr:
         mkdir -p "$OUT_DIR"
         mkdir -p "$(dirname "$LOG_FILE")"
 
-        echo "DSS 차등 메틸화 분석 시작: {wildcards.patient}.{wildcards.tumor_sample_type} vs NORMAL" > "$LOG_FILE"
-        echo "시작 시간: $(date)" >> "$LOG_FILE"
+        echo "DSS start: {wildcards.patient}.{wildcards.tumor_sample_type} vs NORMAL" > "$LOG_FILE"
+        echo "Start time: $(date)" >> "$LOG_FILE"
 
-        # 임시 파일 (OUT_DIR 안에 생성)
+        # Temporary files (created inside OUT_DIR)
         TUMOR_TMP="$OUT_DIR/{params.sample_name}.tumor.tmp"
         NORMAL_TMP="$OUT_DIR/{params.sample_name}.normal.tmp"
 
         gunzip -c {input.tumor_bed} | grep -v '^#' | cut -f1,2,6,7 > "$TUMOR_TMP" 2>> "$LOG_FILE"
         gunzip -c {input.normal_bed} | grep -v '^#' | cut -f1,2,6,7 > "$NORMAL_TMP" 2>> "$LOG_FILE"
 
-        echo "DSS R 스크립트 실행 중..." >> "$LOG_FILE"
+        echo "Running the DSS R script" >> "$LOG_FILE"
 
         Rscript --vanilla "$DSS_SCRIPT" \
             "$TUMOR_TMP" \
@@ -103,12 +103,12 @@ rule dss_dmr:
 
         rm -f "$TUMOR_TMP" "$NORMAL_TMP"
 
-        echo "DSS 차등 메틸화 분석 완료: {wildcards.patient}.{wildcards.tumor_sample_type}" >> "$LOG_FILE"
-        echo "종료 시간: $(date)" >> "$LOG_FILE"
+        echo "DSS done: {wildcards.patient}.{wildcards.tumor_sample_type}" >> "$LOG_FILE"
+        echo "End time: $(date)" >> "$LOG_FILE"
         """
 
 #######################################################################
-# 3) DMR annotation 분석
+# 3. DMR annotation
 #######################################################################
 rule annotate_dmr:
     input:
@@ -144,8 +144,8 @@ rule annotate_dmr:
         mkdir -p "$OUT_DIR"
         mkdir -p "$(dirname "$LOG_FILE")"
 
-        echo "DMR 주석 분석 시작: {wildcards.patient}.{wildcards.tumor_sample_type}" > "$LOG_FILE"
-        echo "시작 시간: $(date)" >> "$LOG_FILE"
+        echo "DMR annotation start: {wildcards.patient}.{wildcards.tumor_sample_type}" > "$LOG_FILE"
+        echo "Start time: $(date)" >> "$LOG_FILE"
 
         PREFIX="$OUT_DIR/{params.sample_name}"
 
@@ -154,15 +154,15 @@ rule annotate_dmr:
             "$PREFIX" \
             {threads} >> "$LOG_FILE" 2>&1
 
-        # 결과 확인 & 이동
+        # Check the result and move it into place
         GENERATED=$(ls "$PREFIX"*.tsv.gz 2>/dev/null || true)
         if [[ -n "$GENERATED" ]]; then
             mv "$GENERATED" "{output.annotated_dmr}"
         else
-            echo "주석된 DMR 파일이 생성되지 않음. 빈 파일 생성." >> "$LOG_FILE"
+            echo "No annotated DMR file was produced; writing an empty one." >> "$LOG_FILE"
             touch "{output.annotated_dmr}"
         fi
 
-        echo "DMR 주석 분석 완료: {wildcards.patient}.{wildcards.tumor_sample_type}" >> "$LOG_FILE"
-        echo "종료 시간: $(date)" >> "$LOG_FILE"
+        echo "DMR annotation done: {wildcards.patient}.{wildcards.tumor_sample_type}" >> "$LOG_FILE"
+        echo "End time: $(date)" >> "$LOG_FILE"
         """

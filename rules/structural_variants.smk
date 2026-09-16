@@ -1,6 +1,6 @@
-# 구조적 변이 검출 및 처리 관련 규칙들
+# Structural variant calling and processing rules
 
-# 1. Severus를 이용한 구조적 변이 검출 (Multimode)
+# 1. Structural variant calling with Severus (multimode)
 rule severus_multimode:
     input:
         normal_bam = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.NORMAL.hiphase.bam"),
@@ -19,11 +19,11 @@ rule severus_multimode:
         """
         mkdir -p {params.out_dir}
         
-        echo "Severus multimode 실행 시작" > {log}
+        echo "Severus multimode start" > {log}
         echo "Control BAM: {input.normal_bam}" >> {log}
         echo "Target BAMs: {input.tumor_bams}" >> {log}
         
-        # Severus multimode 실행 - 여러 target-bam 지원
+        # Severus multimode - several target BAMs at once
         severus \
             --control-bam {input.normal_bam} \
             --target-bam {input.tumor_bams} \
@@ -37,10 +37,10 @@ rule severus_multimode:
             --single-bp \
             >> {log} 2>&1
             
-        echo "Severus multimode 완료" >> {log}
+        echo "Severus multimode done" >> {log}
         """
 
-# 2. tabix 필터링
+# 2. tabix filtering
 rule tabix_filter:
     input:
         uncompressed_vcf = join(OUTPUT_DIR, "{patient}", "sv", "severus_{patient}", "somatic_SVs", "severus_somatic.vcf"),
@@ -55,7 +55,7 @@ rule tabix_filter:
         """
         mkdir -p $(dirname {output.vcf})
         
-        echo "VCF 파일 인덱싱 및 필터링 시작: {input.uncompressed_vcf}" > {log}
+        echo "Indexing and filtering the VCF: {input.uncompressed_vcf}" > {log}
         
         bcftools sort -Oz -o tmp.{wildcards.patient}.sorted.vcf.gz "{input.uncompressed_vcf}" >> {log} 2>&1
         
@@ -67,10 +67,10 @@ rule tabix_filter:
         
         rm -f tmp.{wildcards.patient}.sorted.vcf.gz tmp.{wildcards.patient}.sorted.vcf.gz.tbi >> {log} 2>&1
         
-        echo "완료: VCF 파일 처리가 완료되었습니다. 결과 파일: {output.vcf}, {output.tbi}" >> {log}
+        echo "Done. Result: {output.vcf}, {output.tbi}" >> {log}
         """
 
-# 3. SVpack 필터링 및 주석 
+# 3. SVpack filtering and annotation
 rule svpack:
     input:
         filtered_sv_vcf = join(OUTPUT_DIR, "{patient}", "sv", "tabix_{patient}", "{patient}.tabix.somatic.sv.vcf.gz"),
@@ -90,9 +90,9 @@ rule svpack:
         """
         mkdir -p {params.out_dir}
         
-        echo "SVPACK 필터링 및 주석 시작: {input.filtered_sv_vcf}" > {log}
+        echo "SVpack start: {input.filtered_sv_vcf}" > {log}
         
-        # svpack 파이프라인 실행 결과를 임시 압축되지 않은 파일에 저장
+        # Write the svpack pipeline result to an uncompressed temporary file
         python {params.svpack_executable} filter --pass-only "{input.filtered_sv_vcf}" 2>> {log} | \
         python {params.svpack_executable} filter --min-svlen 50 - 2>> {log} | \
         python {params.svpack_executable} match -v - "{input.match_vcf}" 2>> {log} | \
@@ -100,25 +100,25 @@ rule svpack:
         python {params.svpack_executable} tagzygosity - 2>> {log} \
         > {params.temp_uncompressed_svpack_vcf}
         
-        # 생성된 임시 파일이 비어있지 않은지 확인
+        # Make sure the temporary file is not empty
         if [ ! -s "{params.temp_uncompressed_svpack_vcf}" ]; then
-            echo "Error: svpack 파이프라인에서 {params.temp_uncompressed_svpack_vcf} 파일 생성 실패 또는 비어있음" >> {log}
+            echo "Error: the svpack pipeline did not produce {params.temp_uncompressed_svpack_vcf} (missing or empty)" >> {log}
             exit 1
         fi
 
-        echo "임시 VCF 압축 및 인덱싱 중..." >> {log}
-        # 임시 파일을 bgzip으로 압축하여 최종 출력 파일(.gz) 생성
+        echo "Compressing and indexing the temporary VCF" >> {log}
+        # bgzip the temporary file into the final output
         bgzip -f -c {params.temp_uncompressed_svpack_vcf} > {output.svpack_vcf_gz} 2>> {log}
-        # 최종 압축 파일 인덱싱
+        # Index the final compressed file
         tabix -f -p vcf {output.svpack_vcf_gz} 2>> {log}
         
-        # 임시 압축되지 않은 파일 삭제
+        # Remove the uncompressed temporary file
         rm -f {params.temp_uncompressed_svpack_vcf}
         
-        echo "SVPACK 완료: {output.svpack_vcf_gz}" >> {log}
+        echo "SVpack done: {output.svpack_vcf_gz}" >> {log}
         """ 
 
-# 4. recover_mate_bnd 실행
+# 4. Recovering missing BND mates
 rule recover_mate_bnd:
     input:
         original_vcf = join(OUTPUT_DIR, "{patient}", "sv", "tabix_{patient}", "{patient}.tabix.somatic.sv.vcf.gz"),
@@ -139,12 +139,12 @@ rule recover_mate_bnd:
         """
         mkdir -p {params.out_dir}
         
-        echo "=== recover_mate_bnd 시작 ===" > {log}
-        echo "실행 디렉토리: $(pwd)" >> {log}
-        echo "입력 original_vcf: {input.original_vcf}" >> {log}
-        echo "입력 filtered_vcf_gz: {input.filtered_vcf_gz}" >> {log}
+        echo "=== recover_mate_bnd start ===" > {log}
+        echo "Working directory: $(pwd)" >> {log}
+        echo "Input original_vcf: {input.original_vcf}" >> {log}
+        echo "Input filtered_vcf_gz: {input.filtered_vcf_gz}" >> {log}
 
-        echo "누락된 짝 ID 찾는 중..." >> {log}
+        echo "Looking for missing mate IDs" >> {log}
         
         bcftools query -f '%ID\\t%MATE_ID\\n' {input.filtered_vcf_gz} 2>> {log} | grep -v '\\.' 2>> {log} | cut -f1 | sort > {params.tmp_ids}
         bcftools query -f '%ID\\t%MATE_ID\\n' {input.filtered_vcf_gz} 2>> {log} | grep -v '\\.' 2>> {log} | cut -f2 | sort > {params.tmp_mate_ids}
@@ -152,29 +152,29 @@ rule recover_mate_bnd:
         comm -13 {params.tmp_ids} {params.tmp_mate_ids} > {params.missing_mate_list} 2>> {log}
 
         if [ -s "{params.missing_mate_list}" ]; then
-            echo "누락된 짝 ID가 {params.missing_mate_list} 에 발견됨. 추출 및 병합 진행." >> {log}
+            echo "Missing mate IDs found in {params.missing_mate_list} ; extracting and merging." >> {log}
             
             bcftools view -i ID=@$(basename {params.missing_mate_list}) "{input.original_vcf}" 2>> {log} | \
                 bcftools sort -Oz -o {params.missing_mate_vcf} >> {log} 2>&1
             
             if [ ! -s "{params.missing_mate_vcf}" ]; then
-                echo "오류: bcftools view 또는 sort 이후 MISSING_MATE_VCF 파일이 비어있거나 생성되지 않았습니다." >> {log}
+                echo "ERROR: MISSING_MATE_VCF is empty or missing after bcftools view/sort." >> {log}
                 exit 1
             fi
             tabix -f -p vcf {params.missing_mate_vcf} >> {log} 2>&1
             
-            echo "파일 병합 및 정렬 중..." >> {log}
+            echo "Merging and sorting" >> {log}
             bcftools concat -a "{input.filtered_vcf_gz}" {params.missing_mate_vcf} 2>> {log} | \
                 bcftools sort -Oz -o "{output.vcf}" >> {log} 2>&1
         else
-            echo "누락된 짝 ID가 없습니다. 원본 필터링된 VCF를 최종 결과로 사용합니다." >> {log}
+            echo "No missing mate IDs; using the filtered VCF as the final result." >> {log}
             cp "{input.filtered_vcf_gz}" "{output.vcf}" >> {log} 2>&1
         fi
         
         tabix -f -p vcf "{output.vcf}" >> {log} 2>&1
         
-        # 임시 파일 최종 정리
+        # Final cleanup of temporary files
         rm -f {params.tmp_ids} {params.tmp_mate_ids} {params.missing_mate_list} {params.missing_mate_vcf} {params.missing_mate_vcf}.tbi >> {log} 2>&1
         
-        echo "recover_mate_bnd 완료: {output.vcf}" >> {log}
+        echo "recover_mate_bnd done: {output.vcf}" >> {log}
         """ 

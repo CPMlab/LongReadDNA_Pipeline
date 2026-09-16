@@ -1,72 +1,72 @@
-# Long-read 암 게놈 분석 워크플로우 설정 파일
-# repo 에 포함된 소형 파일은 scripts/, resources/ 아래 있고,
-# 대용량 참조 데이터(ref/vep_cache/container/annotsv/mitelman)는 resource/ 에 직접 준비해야 함 (.gitignore 대상)
-# 샘플 정보는 samples_file에서 읽어들임
+# Configuration for the long-read cancer genome workflow
+# Small files shipped with this repository live in scripts/ and resources/;
+# large reference data (genome, VEP cache, containers, AnnotSV, Mitelman) must be prepared under resource/ (gitignored).
+# Sample information is read from samples_file.
 
-# 샘플 정보 파일
-samples_file: "samples.tsv"  # patient_id, sample_type, bam_path 컬럼을 가진 TSV 파일
+# Sample sheet
+samples_file: "samples.tsv"  # TSV with patient_id, sample_type, bam_path columns
 
-# 참조 파일
-reference_fasta: "resource/ref/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"  # 참조 게놈
-vep_cache: "resource/vep_cache/homo_sapiens_refseq_vep_112_GRCh38.tar.gz"          # VEP 주석 캐시 파일
-vntr_bed: "resource/severus/human_GRCh38_no_alt_analysis_set.trf.bed"  # VNTR BED 파일
-compendium_file: "resource/intogen_genelist/Compendium_Cancer_Genes_2024-9-30.tsv"  # 암 유전자 정보
-annotsv_cache: "resource/annotsv/annotsv_cache.tar.gz"  # AnnotSV 주석 캐시
+# Reference files
+reference_fasta: "resource/ref/GCA_000001405.15_GRCh38_no_alt_analysis_set_maskedGRC_exclusions_v2.fasta"  # reference genome
+vep_cache: "resource/vep_cache/homo_sapiens_refseq_vep_112_GRCh38.tar.gz"          # VEP annotation cache
+vntr_bed: "resource/severus/human_GRCh38_no_alt_analysis_set.trf.bed"  # VNTR BED for Severus
+compendium_file: "resource/intogen_genelist/Compendium_Cancer_Genes_2024-9-30.tsv"  # IntOGen Compendium of Cancer Genes
+annotsv_cache: "resource/annotsv/annotsv_cache.tar.gz"  # AnnotSV annotation cache
 
-# 컨테이너 경로
-clair3_container: "resource/container/clair3_latest.sif"        # Clair3 싱귤래리티 이미지
-deepsomatic_container: "resource/container/deepsomatic_1.8.0.sif"  # DeepSomatic 싱귤래리티 이미지
-savana_container: "resource/container/savana_1.3.4.sif"        # SAVANA 싱귤래리티 이미지
-wakhan_container: "resource/container/wakhan_latest.sif"        # Wakhan 싱귤래리티 이미지
+# Container images
+clair3_container: "resource/container/clair3_latest.sif"        # Clair3
+deepsomatic_container: "resource/container/deepsomatic_1.8.0.sif"  # DeepSomatic
+savana_container: "resource/container/savana_1.3.4.sif"        # SAVANA
+wakhan_container: "resource/container/wakhan_latest.sif"        # Wakhan
 
-# 계산 자원 (4노드 × 96스레드 × 500GB 활용)
-threads: 96                  # 대부분의 작업에 사용할 스레드 수 (최대 활용)
-threads_low: 24              # 경량 작업에 사용할 스레드 수
+# Compute resources
+threads: 96                  # threads for heavy rules
+threads_low: 24              # threads for light rules
 
-# 출력 디렉토리
-output_dir: "results"        # 결과 파일이 저장될 디렉토리
+# Output directory
+output_dir: "results"        # where results are written
 
-# SV 분석 리소스
-contig_bed: "resources/chr.bed"  # 필터링할 contig 목록
-svpack_script: "scripts/svpack.py"  # SVpack 스크립트 경로
-mitelman_mcgene: "resource/circos/mitel"  # Mitelman 데이터베이스
-circos_config: "resources/hg38.bed"  # Circos 설정
-cytoband_file: "resources/hg38_cytoband.tsv"  # 염색체 밴드 정보
+# Structural variant resources
+contig_bed: "resources/chr.bed"  # contigs to keep
+svpack_script: "scripts/svpack.py"  # bundled SVpack script
+mitelman_mcgene: "resource/circos/mitel"  # Mitelman database MCGENE dump
+circos_config: "resources/hg38.bed"  # circos genome bed
+cytoband_file: "resources/hg38_cytoband.tsv"  # cytoband table
 
 #SVPACK
 reference_gff: "resource/svpack/Homo_sapiens.GRCh38.112.chr.reformatted.gff3"
 svpack_match_vcf: "resource/svpack/severus.jasmine.AN10.AC4.nosample.vcf.gz"
 
-# 메틸화 분석 설정
-methylation_min_coverage: 5   # 최소 커버리지 (기본값: 5)
-methylation_min_mapq: 1       # 최소 매핑 품질 (기본값: 1)
+# Methylation
+methylation_min_coverage: 5   # minimum coverage
+methylation_min_mapq: 1       # minimum mapping quality
 
-# CNV 분석 설정
-# SAVANA 설정
-savana_min_supp: 3             # SAVANA 최소 support reads
-savana_min_af: 0.05            # SAVANA 최소 allele frequency
-savana_svlength: 50            # SAVANA 최소 SV 길이
+# Copy number
+# SAVANA
+savana_min_supp: 3             # minimum supporting reads
+savana_min_af: 0.05            # minimum allele frequency
+savana_svlength: 50            # minimum SV length
 
-# Wakhan 설정  
-wakhan_purity_range: "0.2-1.0"  # Wakhan purity 범위
-wakhan_ploidy_range: "1-6"      # Wakhan ploidy 범위
+# Wakhan  
+wakhan_purity_range: "0.2-1.0"  # purity search range
+wakhan_ploidy_range: "1-6"      # ploidy search range
 
-# DSS 차등 메틸화 분석 설정
-dss_smoothing: true          # 스무딩 적용 여부
-dss_delta: 0.1              # 최소 메틸화 차이 임계값
-dss_pvalue: 0.01            # p-value 임계값
+# DSS differential methylation
+dss_smoothing: true          # apply smoothing
+dss_delta: 0.1              # minimum methylation difference
+dss_pvalue: 0.01            # p-value threshold
 
 
 # ---------------------------------------------------------------------------
 # PURPLE (HMFtools) — purity / ploidy / allele-specific CNV
-# jar 와 참조 tarball 준비 방법은 docs/INSTALLATION.md 참조
+# See docs/INSTALLATION.md for how to obtain the jars and the resource bundle.
 # ---------------------------------------------------------------------------
 amber_jar: "resource/purple/amber-4.0-jar-with-dependencies.gamma1000.jar"
 cobalt_jar: "resource/purple/cobalt-1.16.0-jar-with-dependencies.jar"
 purple_jar: "resource/purple/purple-4.0-jar-with-dependencies.jar"
 hmf_resources_tarball: "resource/purple/hmf_pipeline_resources.38_v2.0.0--3.tar.gz"
 
-purple_java_mem: "60G"       # java -Xmx
+purple_java_mem: "60G"       # java -Xmx for the HMFtools jars
 cobalt_pcf_gamma: 1000       # Cobalt segmentation gamma
 purple_min_purity: 0.08
 purple_max_purity: 0.99
@@ -74,16 +74,16 @@ purple_min_ploidy: 1
 purple_max_ploidy: 8
 
 # ---------------------------------------------------------------------------
-# 바이오마커 (HRD / mutational signature / MSI / TMB)
+# Biomarkers (HRD / mutational signatures / MSI / TMB)
 # ---------------------------------------------------------------------------
-chord_container: "resource/container/chord.sif"                      # HRD 예측
+chord_container: "resource/container/chord.sif"                      # HRD prediction
 somatic_r_tools_container: "resource/container/somatic_r_tools.sif"   # MutationalPatterns
 owl_container: "resource/container/owl.sif"                          # MSI
 tmb_container: "resource/container/tmb_calculator.sif"               # TMB
 
 mutsig_max_delta: 0.004      # MutationalPatterns bootstrap max delta
-msi_min_depth: 5             # owl score 최소 depth
-tmb_min_depth: 10            # TMB: 변이 최소 depth
-tmb_min_coverage: 10         # TMB: 영역 최소 coverage
-tmb_min_vaf: 0.10            # TMB: 최소 VAF
-tmb_gnomad_max_af: 0.01      # TMB: gnomAD AF 상한 (이보다 흔하면 제외)
+msi_min_depth: 5             # owl score minimum depth
+tmb_min_depth: 10            # TMB: minimum variant depth
+tmb_min_coverage: 10         # TMB: minimum region coverage
+tmb_min_vaf: 0.10            # TMB: minimum VAF
+tmb_gnomad_max_af: 0.01      # TMB: drop variants above this gnomAD AF

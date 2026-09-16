@@ -1,6 +1,6 @@
-# 변이 검출 및 위상결정 관련 규칙들
+# Variant calling and phasing rules
 
-# 1. Clair3 변이 검출 (모든 샘플에 대해)
+# 1. Clair3 germline variant calling (all samples)
 rule clair3:
     input:
         bam = join(OUTPUT_DIR, "{patient}", "mapping", "{patient}.{sample_type}.aligned.bam"),
@@ -16,28 +16,28 @@ rule clair3:
         join(OUTPUT_DIR, "{patient}", "logs", "clair3_{patient}_{sample_type}.log")
     shell:
         """
-        # 로그 및 출력 디렉토리 생성
+        # Create log and output directories
         mkdir -p $(dirname {log})
         mkdir -p {params.out_dir}
 
-        echo "=== Clair3 변이 검출 시작: {wildcards.patient}.{wildcards.sample_type} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
-        echo "입력 BAM: {input.bam}" >> {log}
-        echo "출력 디렉토리: {params.out_dir}" >> {log}
+        echo "=== Clair3 start: {wildcards.patient}.{wildcards.sample_type} ===" > {log}
+        echo "Start time: $(date)" >> {log}
+        echo "Input BAM: {input.bam}" >> {log}
+        echo "Output directory: {params.out_dir}" >> {log}
 
-        # 임시 파일 이름 정의
+        # Temporary file name
         TEMP_VCF=$(mktemp {params.out_dir}/temp_clair3_{wildcards.sample_type}_XXXXXX.vcf)
-        echo "임시 VCF: $TEMP_VCF" >> {log}
+        echo "Temporary VCF: $TEMP_VCF" >> {log}
 
-        # Clair3 변이 검출 (Singularity 내부에서 실행)
-        echo "Clair3 Singularity 컨테이너 실행 중..." >> {log}
+        # Clair3 inside the Singularity container
+        echo "Running the Clair3 container" >> {log}
         singularity exec \
             --bind $(pwd):$(pwd) \
             {config[clair3_container]} \
             /bin/bash -c "
                 set -euxo pipefail
 
-                # Clair3 실행
+                # Run Clair3
                 /opt/bin/run_clair3.sh \
                     --bam_fn={input.bam} \
                     --ref_fn={input.ref} \
@@ -47,26 +47,26 @@ rule clair3:
                     --output={params.out_dir} \
                     --sample_name={params.sample}
 
-                # LowQual 필터 제외하여 임시 VCF 파일 생성
+                # Drop LowQual calls into a temporary VCF
                 gunzip -c {params.out_dir}/merge_output.vcf.gz | \
                     awk 'BEGIN{{OFS=\"\\t\"}} {{if(/^#/ || \\$7 != \"LowQual\") {{print \\$0}}}}' > ${{TEMP_VCF}}
             " >> {log} 2>&1
 
-        echo "Clair3 실행 완료, 후처리 중..." >> {log}
+        echo "Clair3 finished, post-processing" >> {log}
 
-        # 생성된 임시 VCF 파일을 bgzip으로 압축
+        # Compress the temporary VCF with bgzip
         bgzip -f ${{TEMP_VCF}} 2>> {log}
         mv ${{TEMP_VCF}}.gz {output.vcf} 2>> {log}
 
-        # 최종 VCF 파인덱싱
-        echo "VCF 인덱싱 중..." >> {log}
+        # Index the final VCF
+        echo "Indexing the VCF" >> {log}
         tabix -p vcf {output.vcf} 2>> {log}
         
-        echo "=== Clair3 변이 검출 완료 ===" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "=== Clair3 done ===" >> {log}
+        echo "End time: $(date)" >> {log}
         """
 
-# 2. 체세포 변이 검출 (각 tumor sample에 대해 normal과 비교)
+# 2. Somatic variant calling (each tumor sample against the normal)
 rule deepsomatic:
     input:
         tumor_bam = join(OUTPUT_DIR, "{patient}", "mapping", "{patient}.{tumor_sample_type}.aligned.bam"),
@@ -83,20 +83,20 @@ rule deepsomatic:
         normal_sample_name = lambda wildcards: f"{wildcards.patient}.{get_normal_sample(wildcards.patient)}"
     threads: THREADS
     resources:
-        deepsomatic_slots=1  # DeepSomatic 작업 동시 실행 방지
+        deepsomatic_slots=1  # only one DeepSomatic job at a time
     log:
         join(OUTPUT_DIR, "{patient}", "logs", "deepsomatic_{patient}_{tumor_sample_type}.log")
     shell:
         """
         mkdir -p {params.out_dir}
         
-        echo "DeepSomatic 체세포 변이 검출 시작: {wildcards.patient}.{wildcards.tumor_sample_type}" > {log}
-        echo "시작 시간: $(date)" >> {log}
-        echo "입력 종양 BAM: {input.tumor_bam}" >> {log}
-        echo "입력 정상 BAM: {input.normal_bam}" >> {log}
-        echo "참조 게놈: {input.ref}" >> {log}
+        echo "DeepSomatic start: {wildcards.patient}.{wildcards.tumor_sample_type}" > {log}
+        echo "Start time: $(date)" >> {log}
+        echo "Input tumor BAM: {input.tumor_bam}" >> {log}
+        echo "Input normal BAM: {input.normal_bam}" >> {log}
+        echo "Reference genome: {input.ref}" >> {log}
         
-        # DeepSomatic 실행 (기본 설정)
+        # Run DeepSomatic with default settings
         singularity run \
             -B $(pwd):$(pwd) \
             {config[deepsomatic_container]} \
@@ -113,29 +113,29 @@ rule deepsomatic:
             --logging_dir={params.out_dir}/logs \
             2>&1 | tee -a {log}
         
-        echo "DeepSomatic 컨테이너 실행 완료" >> {log}
-        echo "후처리 시작 시간: $(date)" >> {log}
+        echo "DeepSomatic container finished" >> {log}
+        echo "Post-processing start time: $(date)" >> {log}
             
-        # PASS 변이만 필터링
+        # Keep PASS variants only
         bcftools view \
             -f PASS -Oz \
             -o {params.out_dir}/somatic_PASS.vcf.gz \
             {params.out_dir}/somatic.vcf.gz \
             2>&1 | tee -a {log}
             
-        # 호모 변이(1/1)를 헤테로 변이(0/1)로 변경
+        # Convert homozygous (1/1) calls to heterozygous (0/1)
         bcftools +setGT {params.out_dir}/somatic_PASS.vcf.gz -- -t q -i 'GT="1/1"' -n c:"0/1" | \
             bcftools sort -Oz -o {output.vcf} \
             2>&1 | tee -a {log}
             
-        # 인덱스 생성
+        # Build the index
         tabix -p vcf {output.vcf} 2>&1 | tee -a {log}
         
-        echo "DeepSomatic 완료: {wildcards.patient}.{wildcards.tumor_sample_type}" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "DeepSomatic done: {wildcards.patient}.{wildcards.tumor_sample_type}" >> {log}
+        echo "End time: $(date)" >> {log}
         """ 
 
-# 3. 정상 샘플 위상 결정
+# 3. Phasing the normal sample
 rule hiphase_normal:
     input:
         bam = lambda wildcards: join(OUTPUT_DIR, wildcards.patient, "mapping", f"{wildcards.patient}.{get_normal_sample(wildcards.patient)}.aligned.bam"),
@@ -153,17 +153,17 @@ rule hiphase_normal:
         join(OUTPUT_DIR, "{patient}", "logs", "hiphase_{patient}_NORMAL_germline.log")
     shell:
         """
-        # 로그 및 출력 디렉토리 생성
+        # Create log and output directories
         mkdir -p $(dirname {log})
         mkdir -p $(dirname {output.bam})
         
-        echo "=== HiPhase 위상결정 시작: {wildcards.patient}.NORMAL ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
-        echo "입력 BAM: {input.bam}" >> {log}
-        echo "입력 VCF: {input.vcf}" >> {log}
-        echo "출력 BAM: {output.bam}" >> {log}
+        echo "=== HiPhase start: {wildcards.patient}.NORMAL ===" > {log}
+        echo "Start time: $(date)" >> {log}
+        echo "Input BAM: {input.bam}" >> {log}
+        echo "Input VCF: {input.vcf}" >> {log}
+        echo "Output BAM: {output.bam}" >> {log}
         
-        # HiPhase 위상결정
+        # HiPhase phasing
         hiphase --bam {input.bam} \
             -t {threads} \
             --output-bam {output.bam} \
@@ -175,15 +175,15 @@ rule hiphase_normal:
             --ignore-read-groups \
             >> {log} 2>&1
             
-        echo "BAM 인덱싱 중..." >> {log}
-        # BAM 인덱스 생성
+        echo "Indexing the BAM" >> {log}
+        # Index the BAM
         samtools index -@{threads} {output.bam} >> {log} 2>&1
         
-        echo "=== HiPhase 위상결정 완료 ===" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "=== HiPhase done ===" >> {log}
+        echo "End time: $(date)" >> {log}
         """
 
-# 4. 종양 샘플 위상 결정 (체세포 변이 포함)
+# 4. Phasing the tumor sample (including somatic variants)
 rule hiphase_tumor:
     input:
         bam = join(OUTPUT_DIR, "{patient}", "mapping", "{patient}.{tumor_sample_type}.aligned.bam"),
@@ -204,18 +204,18 @@ rule hiphase_tumor:
         join(OUTPUT_DIR, "{patient}", "logs", "hiphase_{patient}_{tumor_sample_type}_somatic.log")
     shell:
         """
-        # 로그 및 출력 디렉토리 생성
+        # Create log and output directories
         mkdir -p $(dirname {log})
         mkdir -p $(dirname {output.bam})
         
-        echo "=== HiPhase 종양 위상결정 시작: {wildcards.patient}.{wildcards.tumor_sample_type} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
-        echo "입력 BAM: {input.bam}" >> {log}
-        echo "입력 생식세포 VCF: {input.germline_vcf}" >> {log}
-        echo "입력 체세포 VCF: {input.somatic_vcf}" >> {log}
-        echo "출력 BAM: {output.bam}" >> {log}
+        echo "=== HiPhase (tumor) start: {wildcards.patient}.{wildcards.tumor_sample_type} ===" > {log}
+        echo "Start time: $(date)" >> {log}
+        echo "Input BAM: {input.bam}" >> {log}
+        echo "Input germline VCF: {input.germline_vcf}" >> {log}
+        echo "Input somatic VCF: {input.somatic_vcf}" >> {log}
+        echo "Output BAM: {output.bam}" >> {log}
         
-        # 종양 샘플 위상 결정 (체세포 변이 포함)
+        # Phasing the tumor sample (including somatic variants)
         hiphase --bam {input.bam} \
             -t {threads} \
             --output-bam {output.bam} \
@@ -229,15 +229,15 @@ rule hiphase_tumor:
             --ignore-read-groups \
             >> {log} 2>&1
             
-        echo "BAM 인덱싱 중..." >> {log}
-        # BAM 인덱스 생성
+        echo "Indexing the BAM" >> {log}
+        # Index the BAM
         samtools index -@{threads} {output.bam} >> {log} 2>&1
         
-        echo "=== HiPhase 종양 위상결정 완료 ===" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "=== HiPhase (tumor) done ===" >> {log}
+        echo "End time: $(date)" >> {log}
         """
 
-# 5. 정상 샘플 위상 결정된 VCF 정규화
+# 5. Normalising the phased normal VCF
 rule normalize_normal_vcf:
     input:
         vcf = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.NORMAL.hiphase.vcf.gz"),
@@ -250,20 +250,20 @@ rule normalize_normal_vcf:
         join(OUTPUT_DIR, "{patient}", "logs", "normalize_vcf_{patient}_NORMAL.log")
     shell:
         """
-        # 로그 디렉토리 생성
+        # Create the log directory
         mkdir -p $(dirname {log})
         
-        echo "=== VCF 정규화 시작: {wildcards.patient}.NORMAL ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
-        echo "입력 VCF: {input.vcf}" >> {log}
-        echo "출력 VCF: {output.vcf}" >> {log}
+        echo "=== VCF normalisation start: {wildcards.patient}.NORMAL ===" > {log}
+        echo "Start time: $(date)" >> {log}
+        echo "Input VCF: {input.vcf}" >> {log}
+        echo "Output VCF: {output.vcf}" >> {log}
         
-        # VCF 인덱싱
-        echo "VCF 인덱싱 중..." >> {log}
+        # Index the VCF
+        echo "Indexing the VCF" >> {log}
         bcftools index --threads {threads} {input.vcf} >> {log} 2>&1
         
-        # 정규화 실행
-        echo "VCF 정규화 중..." >> {log}
+        # Run normalisation
+        echo "Normalising the VCF" >> {log}
         bcftools view {input.vcf} | \
           sed -e 's/ID=AD,Number=\\./ID=AD,Number=R/' | \
           bcftools norm --threads {threads} --multiallelics - \
@@ -271,15 +271,15 @@ rule normalize_normal_vcf:
           bcftools sort -Oz -o {output.vcf} \
           2>> {log}
         
-        # 정규화된 VCF 인덱스 생성
-        echo "정규화된 VCF 인덱싱 중..." >> {log}
+        # Index the normalised VCF
+        echo "Indexing the normalised VCF" >> {log}
         bcftools index --threads {threads} -t {output.vcf} >> {log} 2>&1
         
-        echo "=== VCF 정규화 완료 ===" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "=== VCF normalisation done ===" >> {log}
+        echo "End time: $(date)" >> {log}
         """
 
-# 6. 종양 샘플 위상 결정된 VCF 정규화
+# 6. Normalising the phased tumor VCF
 rule normalize_tumor_vcf:
     input:
         vcf = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.{tumor_sample_type}.somatic.hiphase.vcf.gz"),
@@ -294,20 +294,20 @@ rule normalize_tumor_vcf:
         join(OUTPUT_DIR, "{patient}", "logs", "normalize_vcf_{patient}_{tumor_sample_type}_somatic.log")
     shell:
         """
-        # 로그 디렉토리 생성
+        # Create the log directory
         mkdir -p $(dirname {log})
         
-        echo "=== 종양 VCF 정규화 시작: {wildcards.patient}.{wildcards.tumor_sample_type} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
-        echo "입력 VCF: {input.vcf}" >> {log}
-        echo "출력 VCF: {output.vcf}" >> {log}
+        echo "=== Tumor VCF normalisation start: {wildcards.patient}.{wildcards.tumor_sample_type} ===" > {log}
+        echo "Start time: $(date)" >> {log}
+        echo "Input VCF: {input.vcf}" >> {log}
+        echo "Output VCF: {output.vcf}" >> {log}
         
-        # VCF 인덱싱
-        echo "VCF 인덱싱 중..." >> {log}
+        # Index the VCF
+        echo "Indexing the VCF" >> {log}
         bcftools index --threads {threads} {input.vcf} >> {log} 2>&1
         
-        # 정규화 실행
-        echo "VCF 정규화 중..." >> {log}
+        # Run normalisation
+        echo "Normalising the VCF" >> {log}
         bcftools view {input.vcf} | \
           sed -e 's/ID=AD,Number=\\./ID=AD,Number=R/' | \
           bcftools norm --threads {threads} --multiallelics - \
@@ -315,10 +315,10 @@ rule normalize_tumor_vcf:
           bcftools sort -Oz -o {output.vcf} \
           2>> {log}
         
-        # 정규화된 VCF 인덱스 생성
-        echo "정규화된 VCF 인덱싱 중..." >> {log}
+        # Index the normalised VCF
+        echo "Indexing the normalised VCF" >> {log}
         bcftools index --threads {threads} -t {output.vcf} >> {log} 2>&1
         
-        echo "=== 종양 VCF 정규화 완료 ===" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "=== Tumor VCF normalisation done ===" >> {log}
+        echo "End time: $(date)" >> {log}
         """ 

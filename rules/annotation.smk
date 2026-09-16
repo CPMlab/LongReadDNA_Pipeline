@@ -1,6 +1,6 @@
-# VEP 주석 관련 규칙들
+# VEP annotation rules
 
-# 1. VEP 주석 (정상 샘플)
+# 1. VEP annotation (normal sample)
 rule vep_annotate_normal:
     input:
         vcf = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.NORMAL.normalized.vcf.gz"),
@@ -16,23 +16,23 @@ rule vep_annotate_normal:
         join(OUTPUT_DIR, "{patient}", "logs", "vep_{patient}_NORMAL.log")
     shell:
         """
-        # 로그 및 출력 디렉토리 생성
+        # Create log and output directories
         mkdir -p $(dirname {log})
         mkdir -p {params.tmp_dir}
         mkdir -p $(dirname {output.vcf})
         
-        echo "=== VEP 주석 시작: {wildcards.patient}.NORMAL ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
-        echo "입력 VCF: {input.vcf}" >> {log}
-        echo "출력 VCF: {output.vcf}" >> {log}
-        echo "임시 디렉토리: {params.tmp_dir}" >> {log}
+        echo "=== VEP start: {wildcards.patient}.NORMAL ===" > {log}
+        echo "Start time: $(date)" >> {log}
+        echo "Input VCF: {input.vcf}" >> {log}
+        echo "Output VCF: {output.vcf}" >> {log}
+        echo "Temporary directory: {params.tmp_dir}" >> {log}
         
-        # VEP 캐시 압축 해제
-        echo "VEP 캐시 압축 해제 중..." >> {log}
+        # Extract the VEP cache
+        echo "Extracting the VEP cache" >> {log}
         tar -xzf {input.vep_cache} -C {params.tmp_dir} >> {log} 2>&1
         
-        # VEP 주석 추가
-        echo "VEP 주석 처리 중..." >> {log}
+        # Run VEP
+        echo "Running VEP" >> {log}
         vep \
           --cache \
           --cache_version 112 \
@@ -56,19 +56,19 @@ rule vep_annotate_normal:
           -o {output.vcf} \
           >> {log} 2>&1
           
-        # 인덱스 생성
-        echo "VCF 인덱싱 중..." >> {log}
+        # Build the index
+        echo "Indexing the VCF" >> {log}
         tabix -p vcf {output.vcf} >> {log} 2>&1
         
-        # 임시 파일 정리
-        echo "임시 파일 정리 중..." >> {log}
+        # Clean up temporary files
+        echo "Cleaning up temporary files" >> {log}
         rm -rf {params.tmp_dir} >> {log} 2>&1
         
-        echo "=== VEP 주석 완료 ===" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "=== VEP done ===" >> {log}
+        echo "End time: $(date)" >> {log}
         """
 
-# 2. VEP 주석 (체세포 변이)
+# 2. VEP annotation (somatic variants)
 rule vep_annotate_somatic:
     input:
         vcf = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.{tumor_sample_type}.somatic.normalized.vcf.gz"),
@@ -86,23 +86,23 @@ rule vep_annotate_somatic:
         join(OUTPUT_DIR, "{patient}", "logs", "vep_{patient}_{tumor_sample_type}_somatic.log")
     shell:
         """
-        # 로그 및 출력 디렉토리 생성
+        # Create log and output directories
         mkdir -p $(dirname {log})
         mkdir -p {params.tmp_dir}
         mkdir -p $(dirname {output.vcf})
         
-        echo "=== VEP 체세포 주석 시작: {wildcards.patient}.{wildcards.tumor_sample_type} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
-        echo "입력 VCF: {input.vcf}" >> {log}
-        echo "출력 VCF: {output.vcf}" >> {log}
-        echo "임시 디렉토리: {params.tmp_dir}" >> {log}
+        echo "=== VEP (somatic) start: {wildcards.patient}.{wildcards.tumor_sample_type} ===" > {log}
+        echo "Start time: $(date)" >> {log}
+        echo "Input VCF: {input.vcf}" >> {log}
+        echo "Output VCF: {output.vcf}" >> {log}
+        echo "Temporary directory: {params.tmp_dir}" >> {log}
         
-        # VEP 캐시 압축 해제
-        echo "VEP 캐시 압축 해제 중..." >> {log}
+        # Extract the VEP cache
+        echo "Extracting the VEP cache" >> {log}
         tar -xzf {input.vep_cache} -C {params.tmp_dir} >> {log} 2>&1
         
-        # VEP 주석 추가
-        echo "VEP 주석 처리 중..." >> {log}
+        # Run VEP
+        echo "Running VEP" >> {log}
         vep \
           --cache \
           --cache_version 112 \
@@ -126,14 +126,14 @@ rule vep_annotate_somatic:
           -o {output.vcf} \
           >> {log} 2>&1
           
-        # 인덱스 생성
-        echo "VCF 인덱싱 중..." >> {log}
+        # Build the index
+        echo "Indexing the VCF" >> {log}
         tabix -p vcf {output.vcf} >> {log} 2>&1
         
-        # 임시 파일 정리
-        echo "임시 파일 정리 중..." >> {log}
+        # Clean up temporary files
+        echo "Cleaning up temporary files" >> {log}
         rm -rf {params.tmp_dir} >> {log} 2>&1
         
-        echo "=== VEP 체세포 주석 완료 ===" >> {log}
-        echo "종료 시간: $(date)" >> {log}
+        echo "=== VEP (somatic) done ===" >> {log}
+        echo "End time: $(date)" >> {log}
         """ 

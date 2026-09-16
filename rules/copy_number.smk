@@ -1,6 +1,6 @@
-# Copy Number 및 Purity/Ploidy 분석 관련 규칙들
+# Copy number and purity/ploidy rules
 
-# 1. SAVANA SV 호출 및 CNV 분석 (각 종양 샘플에 대해)
+# 1. SAVANA SV and CNV calling (each tumor sample)
 rule savana_sv:
     input:
         tumor_bam = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.{tumor_sample_type}.hiphase.bam"),
@@ -42,10 +42,10 @@ rule savana_sv:
         mkdir -p "$OUT_DIR"
         mkdir -p "$(dirname "$LOG_FILE")"
         
-        echo "SAVANA SV 및 CNV 분석 시작: {wildcards.patient}.{wildcards.tumor_sample_type}" > "$LOG_FILE"
-        echo "시작 시간: $(date)" >> "$LOG_FILE"
+        echo "SAVANA start: {wildcards.patient}.{wildcards.tumor_sample_type}" > "$LOG_FILE"
+        echo "Start time: $(date)" >> "$LOG_FILE"
 
-        # Contig 목록 생성
+        # Build the contig list
         echo -e "chr1\nchr2\nchr3\nchr4\nchr5\nchr6\nchr7\nchr8\nchr9\nchr10\nchr11\nchr12\nchr13\nchr14\nchr15\nchr16\nchr17\nchr18\nchr19\nchr20\nchr21\nchr22\nchrX\nchrY" > "$CONTIGS_FILE"
 
         singularity run -B "$PWD":"$PWD" \
@@ -67,11 +67,11 @@ rule savana_sv:
               --min_af {params.min_af} \
               >> "$LOG_FILE" 2>&1
 
-        echo "SAVANA 완료: {wildcards.patient}.{wildcards.tumor_sample_type}" >> "$LOG_FILE"
-        echo "종료 시간: $(date)" >> "$LOG_FILE"
+        echo "SAVANA done: {wildcards.patient}.{wildcards.tumor_sample_type}" >> "$LOG_FILE"
+        echo "End time: $(date)" >> "$LOG_FILE"
         """
 
-# 2. Wakhan Copy Number 분석 (Severus 결과 활용)
+# 2. Wakhan copy number (using the Severus calls)
 rule wakhan_cnv:
     input:
         tumor_bam = join(OUTPUT_DIR, "{patient}", "phasing", "{patient}.{tumor_sample_type}.hiphase.bam"),
@@ -110,8 +110,8 @@ rule wakhan_cnv:
         mkdir -p "$OUT_DIR"
         mkdir -p "$(dirname "$LOG_FILE")"
 
-        echo "Wakhan Copy Number 분석 시작: {wildcards.patient}.{wildcards.tumor_sample_type}" > "$LOG_FILE"
-        echo "시작 시간: $(date)" >> "$LOG_FILE"
+        echo "Wakhan start: {wildcards.patient}.{wildcards.tumor_sample_type}" > "$LOG_FILE"
+        echo "Start time: $(date)" >> "$LOG_FILE"
 
         singularity run -B "$PWD":"$PWD" \
             "${{CONTAINER}}" \
@@ -132,7 +132,7 @@ rule wakhan_cnv:
         
         WAKHAN_OUT_DIR="$OUT_DIR/{params.sample_name}_wakhan"
         
-        # Purity/Ploidy 결과 정리
+        # Collect purity/ploidy
         echo -e "folder_name\tploidy\tpurity\tconfidence" > "$OUT_DIR/folder_numbers.tsv"
         
         find "$WAKHAN_OUT_DIR" -type d -regex ".*/[0-9.]+_[0-9.]+_[0-9.]+$" | while read dir; do
@@ -146,21 +146,21 @@ rule wakhan_cnv:
         (head -n 1 "$OUT_DIR/folder_numbers.tsv"; cat "$OUT_DIR/temp.tsv") > {output.purity_ploidy}
         rm "$OUT_DIR/temp.tsv" "$OUT_DIR/folder_numbers.tsv"
         
-        # 전체 결과 압축
+        # Archive all results
         tar -czvf {output.wakhan_tar} -C "$OUT_DIR" "{params.sample_name}_wakhan" >> "$LOG_FILE" 2>&1
         
-        # 최고 해법 파일 복사
+        # Copy the best-fit solution
         best_folder=$(head -n 2 {output.purity_ploidy} | tail -n 1 | cut -f1)
         cp -r "$WAKHAN_OUT_DIR/${{best_folder}}" "$OUT_DIR/{params.sample_name}_wakhan_best"
         rm -rf "$OUT_DIR/{params.sample_name}_wakhan_best/variation_plots"
         
-        # 결과 파일 이름 변경
+        # Rename the result files
         mv "$OUT_DIR/{params.sample_name}_wakhan_best/bed_output/"*copynumbers_segments.bed {output.copynumbers_segments}
         mv "$OUT_DIR/{params.sample_name}_wakhan_best/bed_output/loh_regions.bed" {output.loh_regions}
         mv "$OUT_DIR/{params.sample_name}_wakhan_best/bed_output/cancer_genes_copynumber_states.bed" {output.cancer_genes_copynumber}
         
         rm -rf "$WAKHAN_OUT_DIR" "$OUT_DIR/{params.sample_name}_wakhan_best"
         
-        echo "Wakhan 완료: {wildcards.patient}.{wildcards.tumor_sample_type}" >> "$LOG_FILE"
-        echo "종료 시간: $(date)" >> "$LOG_FILE"
+        echo "Wakhan done: {wildcards.patient}.{wildcards.tumor_sample_type}" >> "$LOG_FILE"
+        echo "End time: $(date)" >> "$LOG_FILE"
         """ 

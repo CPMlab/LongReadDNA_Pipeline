@@ -98,15 +98,15 @@ def save_empty_circos(output_svg_path, output_png_path, hg38_bed_path):
         fig.savefig(output_png_path, dpi=300, bbox_inches='tight')
 
 def get_sample_names_from_vcf(vcf_file):
-    """VCF 파일에서 실제 샘플 이름들을 추출"""
+    """Extract the sample names from a VCF."""
     if vcf_file.endswith('.gz'):
         with gzip.open(vcf_file, 'rt') as f:
             for line in f:
                 if line.startswith('#CHROM'):
-                    # VCF 헤더의 마지막 라인에서 샘플 이름들 추출
+                    # Sample names come from the last VCF header line
                     columns = line.strip().split('\t')
                     if len(columns) > 9:
-                        # 10번째 컬럼부터가 샘플 이름들
+                        # Sample names start at column 10
                         return columns[9:]
                     else:
                         return []
@@ -114,26 +114,26 @@ def get_sample_names_from_vcf(vcf_file):
         with open(vcf_file, 'r') as f:
             for line in f:
                 if line.startswith('#CHROM'):
-                    # VCF 헤더의 마지막 라인에서 샘플 이름들 추출
+                    # Sample names come from the last VCF header line
                     columns = line.strip().split('\t')
                     if len(columns) > 9:
-                        # 10번째 컬럼부터가 샘플 이름들
+                        # Sample names start at column 10
                         return columns[9:]
                     else:
                         return []
     return []
 
 def filter_sv_for_sample(df, sample_idx):
-    """특정 샘플의 SV만 필터링 (genotype이 0/0이 아닌 것들)"""
+    """Keep only the SVs of one sample (genotype other than 0/0)."""
     if f'SAMPLE_{sample_idx}' not in df.columns:
         return pd.DataFrame()
     
     sample_col = f'SAMPLE_{sample_idx}'
     
-    # GT 부분만 추출 (첫 번째 ':' 이전 부분)
+    # Take the GT field (before the first ':')
     gt_only = df[sample_col].str.split(':').str[0]
     
-    # 유효한 variant genotype만 선택 (0/0, ./., . 제외)
+    # Keep real genotypes (drop 0/0, ./. and .)
     mask = (gt_only.notna()) & (~gt_only.isin(['0/0', './.', '.', '0|0']))
     
     return df[mask].copy()
@@ -151,7 +151,7 @@ def main():
 
     args = parser.parse_args()
 
-    # VCF에서 실제 샘플 이름들 추출
+    # Sample names from the VCF
     actual_sample_names = get_sample_names_from_vcf(args.input_vcf)
     
     if not actual_sample_names:
@@ -191,28 +191,28 @@ def main():
     # Expand INFO field once for all samples
     df = expand_info_field(df)
     
-    # 모든 융합 결과를 저장할 리스트
+    # Collects the fusion calls of every sample
     all_fusion_results = []
     
-    # 각 샘플에 대해 개별적으로 처리
+    # Process each sample separately
     for sample_idx, sample_name in enumerate(actual_sample_names):
         print(f"Processing sample: {sample_name} (index: {sample_idx})")
         
-        # 해당 샘플의 SV만 필터링
+        # Keep this sample's SVs
         sample_df = filter_sv_for_sample(df, sample_idx)
         
         if sample_df.empty:
             print(f"No variants found for sample {sample_name}")
             continue
             
-        # BND 추출
+        # Extract BNDs
         bnd_only = extract_chr2_pos2(sample_df)
         
         if bnd_only.empty:
             print(f"No BND entries found for sample {sample_name}")
             continue
             
-        # 융합 주석 생성
+        # Annotate fusions
         bnd_only = create_fusion_annotation(bnd_only)
         bnd_only = bnd_only[abs(bnd_only['POS2'] - bnd_only['POS']) > 100000]
         
@@ -220,7 +220,7 @@ def main():
             print(f"No BND entries left after filtering for sample {sample_name}")
             continue
             
-        # 출력 파일 이름에 샘플 이름 포함
+        # Include the sample name in the output file name
         base_svg = os.path.splitext(args.output_svg)[0]
         base_png = os.path.splitext(args.output_png)[0]
         base_tsv = os.path.splitext(args.output_fusion_tsv)[0]
@@ -229,20 +229,20 @@ def main():
         sample_png = f"{base_png}_{sample_name}.png"
         sample_tsv = f"{base_tsv}_{sample_name}.tsv"
         
-        # Circos plot 생성
+        # Draw the circos plot
         circos = Circos.initialize_from_bed(args.circos_bed, space=3)
         circos.text(f"{sample_name} Translocations (GRCh38)", size=15)
         circos.add_cytoband_tracks((95, 100), args.cytoband_file)
         cytoband_df = pd.read_csv(args.cytoband_file, sep="\t")
         
-        # Mitelman database 처리
+        # Mitelman database
         mitelman_db = pd.read_csv(args.mitelman_mcgene, sep="\t")
         mitelman_db = mitelman_db[mitelman_db['Gene'].str.contains("::")]
         mitelman_db['Fusion'] = mitelman_db['Gene'].str.split("::").apply(lambda x: "::".join(sorted(x)))
         mitelman_db = mitelman_db.groupby('Fusion').filter(lambda x: len(x) >= 3)
         unique_mitelman_fusion = mitelman_db['Fusion'].unique()
 
-        # 염색체 필터링
+        # Filter chromosomes
         bnd_only = bnd_only[bnd_only['CHROM'].isin(cytoband_df['#chrom'])]
         bnd_only = bnd_only[bnd_only['CHR2'].isin(cytoband_df['#chrom'])]
 
@@ -250,7 +250,7 @@ def main():
             print(f"No BND entries left after chromosome filtering for sample {sample_name}")
             continue
 
-        # 유전자 라벨 추가
+        # Gene labels
         for sector in circos.sectors:
             sector.text(sector.name, size=10)
             bnd_chr = bnd_only[bnd_only['CHROM'] == sector.name]
@@ -269,7 +269,7 @@ def main():
                     line_kws=dict(ec="grey"),
                 )
 
-        # 링크 색상 함수
+        # Link colour
         def get_link_color(fusion):
             if fusion == '':
                 return 'lightgrey'
@@ -278,37 +278,37 @@ def main():
             else:
                 return 'black'
 
-        # 링크 그리기
+        # Draw links
         bnd_only.apply(lambda row: circos.link(
             (row['CHROM'], row['POS'], row['POS']),
             (row['CHR2'], row['POS2'], row['POS2']),
             color=get_link_color(row['FUSION'])
         ), axis=1)
         
-        # 그림 저장
+        # Save the figure
         fig = circos.plotfig(dpi=300)
         fig.savefig(sample_svg, dpi=300, bbox_inches='tight')
         fig.savefig(sample_png, dpi=300, bbox_inches='tight')
         
-        # 융합 결과에 샘플 이름 추가
+        # Tag the fusion calls with the sample name
         sample_fusion_result = bnd_only[['CHROM', 'POS', 'CHR2', 'POS2', 'GENE', 'FUSION']].copy()
         sample_fusion_result.insert(0, 'SAMPLE_NAME', sample_name)
         
-        # 개별 샘플 TSV 저장
+        # Write the per-sample TSV
         sample_fusion_result.to_csv(sample_tsv, sep='\t', index=False)
         
-        # 전체 결과에 추가
+        # Add to the combined result
         all_fusion_results.append(sample_fusion_result)
         
         print(f"Sample {sample_name} - Circos plot saved to {sample_svg}, {sample_png} and fusion table to {sample_tsv}")
     
-    # 모든 샘플의 융합 결과를 하나의 파일로 통합
+    # Merge the fusion calls of all samples into one file
     if all_fusion_results:
         combined_results = pd.concat(all_fusion_results, ignore_index=True)
         combined_results.to_csv(args.output_fusion_tsv, sep='\t', index=False)
         print(f"Combined fusion results saved to {args.output_fusion_tsv}")
     else:
-        # 빈 파일 생성
+        # Write an empty file
         pd.DataFrame(columns=['SAMPLE_NAME', 'CHROM', 'POS', 'CHR2', 'POS2', 'GENE', 'FUSION']).to_csv(
             args.output_fusion_tsv, sep='\t', index=False
         )

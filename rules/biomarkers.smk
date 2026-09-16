@@ -1,13 +1,13 @@
-# 바이오마커 분석: HRD (CHORD), mutational signature (MutationalPatterns),
+# Biomarkers: HRD (CHORD), mutational signatures (MutationalPatterns),
 # MSI (owl), TMB (tmb-calculator)
-# 모두 HiFi-somatic-WDL 의 annotation.wdl / common.wdl / biomarker.wdl 과 동일한 호출 방식이며
-# 컨테이너 이미지는 config 의 *_container 경로(Singularity .sif)를 사용한다.
+# Same invocations as annotation.wdl / common.wdl / biomarker.wdl in HiFi-somatic-WDL;
+# container images come from the *_container paths in config (Singularity .sif).
 
 BIOMARKER_DIR = join(OUTPUT_DIR, "{patient}", "biomarkers")
 
-# 1. CHORD - 상동재조합결핍(HRD) 예측
-#    체세포 SNV/indel VCF 와 Severus SV VCF 를 함께 사용한다.
-#    컨테이너의 기본 SV caller 설정이 GRIDSS 이므로 manta 로 바꿔서 실행한다 (원본 WDL 과 동일).
+# 1. CHORD - homologous recombination deficiency (HRD) prediction
+#    Uses the somatic SNV/indel VCF together with the Severus SV VCF.
+#    The image defaults to GRIDSS, so it is switched to manta (as in the reference WDL).
 rule chord_hrd:
     input:
         small_variant_vcf = join(OUTPUT_DIR, "{patient}", "snv", "{patient}.{tumor_sample_type}.somatic.vcf.gz"),
@@ -28,8 +28,8 @@ rule chord_hrd:
         mkdir -p $(dirname {log})
         mkdir -p {params.out_dir}
 
-        echo "=== CHORD HRD 예측 시작: {params.pname} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== CHORD HRD start: {params.pname} ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         SNV_ABS=$(realpath {input.small_variant_vcf})
         SV_ABS=$(realpath {input.sv_vcf})
@@ -44,7 +44,7 @@ rule chord_hrd:
                 set -euxo pipefail
                 cd $OUT_ABS
 
-                # 컨테이너 기본값(GRIDSS)을 manta 로 교체
+                # Replace the GRIDSS default with manta
                 sed 's/gridss/manta/g' /opt/chord/extractSigPredictHRD.R > ./extractSigPredictHRD.R
                 chmod +x ./extractSigPredictHRD.R
 
@@ -53,10 +53,10 @@ rule chord_hrd:
                 rm -f ./extractSigPredictHRD.R
             " >> {log} 2>&1
 
-        echo "=== CHORD HRD 완료: $(date) ===" >> {log}
+        echo "=== CHORD HRD done: $(date) ===" >> {log}
         """
 
-# 2. MutationalPatterns - 체세포 SNV 기반 mutational signature
+# 2. MutationalPatterns - mutational signatures from somatic SNVs
 rule mutational_signature:
     input:
         vcf = join(OUTPUT_DIR, "{patient}", "snv", "{patient}.{tumor_sample_type}.somatic.vcf.gz")
@@ -79,8 +79,8 @@ rule mutational_signature:
         mkdir -p $(dirname {log})
         mkdir -p {params.out_dir}
 
-        echo "=== Mutational signature 시작: {params.pname} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== Mutational signature start: {params.pname} ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         VCF_ABS=$(realpath {input.vcf})
         OUT_ABS=$(realpath {params.out_dir})
@@ -97,10 +97,10 @@ rule mutational_signature:
                     {params.max_delta}
             " >> {log} 2>&1
 
-        echo "=== Mutational signature 완료: $(date) ===" >> {log}
+        echo "=== Mutational signature done: $(date) ===" >> {log}
         """
 
-# 3. owl - micro-satellite instability (MSI) 프로파일링
+# 3. owl - micro-satellite instability (MSI) profiling
 rule owl_msi_profile:
     input:
         bam = join(OUTPUT_DIR, "{patient}", "mapping", "{patient}.{tumor_sample_type}.aligned.bam"),
@@ -120,8 +120,8 @@ rule owl_msi_profile:
         mkdir -p $(dirname {log})
         mkdir -p {params.out_dir}
 
-        echo "=== owl MSI profile 시작: {params.pname} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== owl MSI profile start: {params.pname} ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         BAM_ABS=$(realpath {input.bam})
         OUT_ABS=$(realpath {output.profile})
@@ -132,7 +132,7 @@ rule owl_msi_profile:
             /bin/bash -c "
                 set -euxo pipefail
 
-                # 컨테이너 내장 마커 BED (GRCh38) 사용
+                # Use the GRCh38 marker BED bundled in the image
                 gunzip -c /opt/owl/data/GRCh38_owl_markers.bed.gz > \$TMPDIR/owl_markers.bed 2>/dev/null || \
                     gunzip -c /opt/owl/data/GRCh38_owl_markers.bed.gz > /tmp/owl_markers.bed
                 MARKERS=\$TMPDIR/owl_markers.bed
@@ -144,10 +144,10 @@ rule owl_msi_profile:
                     > $OUT_ABS
             " >> {log} 2>&1
 
-        echo "=== owl MSI profile 완료: $(date) ===" >> {log}
+        echo "=== owl MSI profile done: $(date) ===" >> {log}
         """
 
-# 4. owl - MSI 스코어 계산
+# 4. owl - MSI scoring
 rule owl_msi_score:
     input:
         profile = join(BIOMARKER_DIR, "{patient}.{tumor_sample_type}.owl.txt")
@@ -167,8 +167,8 @@ rule owl_msi_score:
         """
         mkdir -p $(dirname {log})
 
-        echo "=== owl MSI score 시작: {params.pname} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== owl MSI score start: {params.pname} ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         PROFILE_ABS=$(realpath {input.profile})
         OUT_ABS=$(realpath {params.out_dir})
@@ -184,11 +184,11 @@ rule owl_msi_score:
                     --min-depth {params.min_depth}
             " >> {log} 2>&1
 
-        echo "=== owl MSI score 완료: $(date) ===" >> {log}
+        echo "=== owl MSI score done: $(date) ===" >> {log}
         """
 
-# 5. TMB (tumor mutational burden) 추정
-#    전체 게놈 기준과 Gencode CDS 영역 기준 두 가지를 산출한다.
+# 5. Tumor mutational burden (TMB)
+#    Reported genome-wide and restricted to Gencode CDS regions.
 rule tmb_estimate:
     input:
         vcf = join(OUTPUT_DIR, "{patient}", "annotation", "{patient}.{tumor_sample_type}.somatic.vep.vcf.gz"),
@@ -214,8 +214,8 @@ rule tmb_estimate:
         mkdir -p $(dirname {log})
         mkdir -p {params.out_dir}
 
-        echo "=== TMB 추정 시작: {params.pname} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== TMB start: {params.pname} ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         VCF_ABS=$(realpath {input.vcf})
         COV_ABS=$(realpath {input.coverage})
@@ -228,7 +228,7 @@ rule tmb_estimate:
                 set -euxo pipefail
                 cd $OUT_ABS
 
-                # 전체 게놈 기준
+                # Genome-wide
                 python /opt/venv/bin/calculate_tmb.py \
                     --vcf $VCF_ABS \
                     --coverage $COV_ABS \
@@ -239,7 +239,7 @@ rule tmb_estimate:
                     --output {params.pname}.tmb_estimate.json \
                     --debug-tsv {params.pname}.tmb_estimate.tsv
 
-                # Gencode CDS 영역 기준 (컨테이너 내장 BED)
+                # Restricted to Gencode CDS regions (BED bundled in the image)
                 python /opt/venv/bin/calculate_tmb.py \
                     --vcf $VCF_ABS \
                     --coverage $COV_ABS \
@@ -252,5 +252,5 @@ rule tmb_estimate:
                     --region-bed /opt/gencode_46_coding.bed.gz
             " >> {log} 2>&1
 
-        echo "=== TMB 추정 완료: $(date) ===" >> {log}
+        echo "=== TMB done: $(date) ===" >> {log}
         """

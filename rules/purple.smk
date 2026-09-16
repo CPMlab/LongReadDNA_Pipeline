@@ -1,11 +1,11 @@
-# PURPLE (HMFtools) 기반 purity/ploidy 및 allele-specific CNV
-# Amber (BAF) -> Cobalt (read ratio) -> Purple (purity/ploidy/CNV) 순서로 실행한다.
-# HiFi-somatic-WDL 의 clonality.wdl 과 동일한 호출 방식이며, 컨테이너 대신
-# 로컬 jar (config 의 amber_jar / cobalt_jar / purple_jar) 를 직접 사용한다.
+# Purity/ploidy and allele-specific copy number with PURPLE (HMFtools)
+# Runs Amber (BAF) -> Cobalt (read ratio) -> Purple (purity/ploidy/CN) in order.
+# Same invocation as clonality.wdl in HiFi-somatic-WDL, but using local jars
+# (config: amber_jar / cobalt_jar / purple_jar) instead of a container.
 
 PURPLE_DIR = join(OUTPUT_DIR, "{patient}", "cnv", "purple_{patient}_{tumor_sample_type}")
 
-# 0. HMF 참조 리소스 tarball 압축 해제 (여러 샘플이 공유하므로 한 번만)
+# 0. Unpack the HMF reference bundle once; every sample reuses it
 rule hmf_resources:
     input:
         tarball = config["hmf_resources_tarball"]
@@ -18,18 +18,18 @@ rule hmf_resources:
         mkdir -p $(dirname {log})
         mkdir -p {output.res_dir}
 
-        echo "=== HMF 참조 리소스 압축 해제 ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== Unpacking HMF reference bundle ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         tar -xzf {input.tarball} -C {output.res_dir} 2>> {log}
 
-        # 필수 파일 확인
+        # Check that the required files are present
         AMBER_LOCI=$(find {output.res_dir} -name "AmberGermlineSites.*.tsv.gz" | head -1)
         GC_PROFILE=$(find {output.res_dir} -name "GC_profile.*.cnp" | head -1)
         ENSEMBL_DATA=$(find {output.res_dir} -type d -name "ensembl_data" | head -1)
 
         if [ -z "$AMBER_LOCI" ] || [ -z "$GC_PROFILE" ] || [ -z "$ENSEMBL_DATA" ]; then
-            echo "❌ HMF 리소스에서 필수 파일을 찾지 못했습니다." >> {log}
+            echo "ERROR: required files not found in the HMF bundle." >> {log}
             echo "  AmberGermlineSites: $AMBER_LOCI" >> {log}
             echo "  GC_profile: $GC_PROFILE" >> {log}
             echo "  ensembl_data: $ENSEMBL_DATA" >> {log}
@@ -39,10 +39,10 @@ rule hmf_resources:
         echo "AmberGermlineSites: $AMBER_LOCI" >> {log}
         echo "GC_profile: $GC_PROFILE" >> {log}
         echo "ensembl_data: $ENSEMBL_DATA" >> {log}
-        echo "=== 완료: $(date) ===" >> {log}
+        echo "=== done: $(date) ===" >> {log}
         """
 
-# 1. Amber - B-allele frequency 및 contamination 추정
+# 1. Amber - B-allele frequency and contamination
 rule purple_amber:
     input:
         normal_bam = join(OUTPUT_DIR, "{patient}", "mapping", "{patient}.NORMAL.aligned.bam"),
@@ -69,8 +69,8 @@ rule purple_amber:
         mkdir -p $(dirname {log})
         mkdir -p {params.out_dir}
 
-        echo "=== Amber 시작: {params.tumor_name} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== Amber start: {params.tumor_name} ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         AMBER_LOCI=$(find {input.res_dir} -name "AmberGermlineSites.*.tsv.gz" | head -1)
         echo "loci: $AMBER_LOCI" >> {log}
@@ -86,10 +86,10 @@ rule purple_amber:
             -ref_genome_version V38 \
             -loci "$AMBER_LOCI" >> {log} 2>&1
 
-        echo "=== Amber 완료: $(date) ===" >> {log}
+        echo "=== Amber done: $(date) ===" >> {log}
         """
 
-# 2. Cobalt - read depth ratio 및 GC 보정
+# 2. Cobalt - read depth ratio and GC correction
 rule purple_cobalt:
     input:
         normal_bam = join(OUTPUT_DIR, "{patient}", "mapping", "{patient}.NORMAL.aligned.bam"),
@@ -117,8 +117,8 @@ rule purple_cobalt:
         mkdir -p $(dirname {log})
         mkdir -p {params.out_dir}
 
-        echo "=== Cobalt 시작: {params.tumor_name} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== Cobalt start: {params.tumor_name} ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         GC_PROFILE=$(find {input.res_dir} -name "GC_profile.*.cnp" | head -1)
         echo "gc_profile: $GC_PROFILE" >> {log}
@@ -135,12 +135,12 @@ rule purple_cobalt:
             -validation_stringency SILENT \
             -gc_profile "$GC_PROFILE" >> {log} 2>&1
 
-        echo "=== Cobalt 완료: $(date) ===" >> {log}
+        echo "=== Cobalt done: $(date) ===" >> {log}
         """
 
 # 3. Purple - purity / ploidy / allele-specific CNV
-#    DeepSomatic VCF 는 PURPLE 이 기대하는 tumor+normal 2-sample 형식이 아니므로
-#    somatic VCF 없이 Amber/Cobalt 결과만으로 적합한다 (기존 수동 실행과 동일한 방식).
+#    The DeepSomatic VCF is not the two-sample tumor+normal format PURPLE expects, so
+#    the fit uses Amber/Cobalt output only (same as the earlier manual runs).
 rule purple:
     input:
         baf_pcf = join(PURPLE_DIR, "amber", "{patient}.{tumor_sample_type}.amber.baf.pcf"),
@@ -175,8 +175,8 @@ rule purple:
         mkdir -p $(dirname {log})
         mkdir -p {params.out_dir}
 
-        echo "=== Purple 시작: {params.tumor_name} ===" > {log}
-        echo "시작 시간: $(date)" >> {log}
+        echo "=== Purple start: {params.tumor_name} ===" > {log}
+        echo "Start time: $(date)" >> {log}
 
         GC_PROFILE=$(find {input.res_dir} -name "GC_profile.*.cnp" | head -1)
         ENSEMBL_DATA=$(find {input.res_dir} -type d -name "ensembl_data" | head -1)
@@ -198,9 +198,9 @@ rule purple:
             -min_purity {params.min_purity} -max_purity {params.max_purity} \
             -min_ploidy {params.min_ploidy} -max_ploidy {params.max_ploidy} >> {log} 2>&1
 
-        # purity / ploidy 요약 추출 (1열 purity, 5열 ploidy)
+        # Extract purity (col 1) and ploidy (col 5)
         cut -f1,5 {output.purity_tsv} | tail -n+2 > {output.purity_ploidy}
 
         echo "purity/ploidy: $(cat {output.purity_ploidy})" >> {log}
-        echo "=== Purple 완료: $(date) ===" >> {log}
+        echo "=== Purple done: $(date) ===" >> {log}
         """

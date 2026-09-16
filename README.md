@@ -6,6 +6,33 @@ SNV/indel · 구조변이 · copy number · 메틸화/DMR 까지 한 번에 돌�
 > A Snakemake workflow for PacBio HiFi whole-genome tumor/normal cancer analysis:
 > SNV/indel calling, structural variants, copy number, CpG methylation and DMR, with per-patient outputs.
 
+## 이 파이프라인의 출발점
+
+PacBio 공식 워크플로우 **[HiFi-somatic-WDL](https://github.com/PacificBiosciences/HiFi-somatic-WDL)**
+(tumor-only / matched tumor-normal somatic variant calling for HiFi reads)를 참고해서, 같은 분석 설계를
+우리 클러스터(SLURM + conda + Singularity) 환경에 맞게 **Snakemake 로 재구성한 것**이다.
+
+원본에서 그대로 가져온 설계:
+
+- 체세포 SNV/indel: DeepSomatic → VEP 주석 → IntOGen Cancer Gene(CCG) 교차
+- 구조변이: Severus → 필터링 → AnnotSV 주석 → IntOGen CCG 교차
+- Mitelman database 기반 fusion 표시
+- CNV/purity·ploidy: Wakhan
+- 메틸화: pb-CpG-tools → DSS 로 tumor vs normal DMR
+
+우리 쪽에서 달라진 점:
+
+| 항목 | HiFi-somatic-WDL | 이 저장소 |
+|---|---|---|
+| 실행 엔진 | WDL (miniwdl / Cromwell) | Snakemake + SLURM 제출 스크립트 |
+| 종양 샘플 | tumor-only 또는 tumor/normal 1쌍 | 환자당 **종양 샘플 여러 개** (PRIMARY/META 등)를 Severus multimode 로 동시 분석 |
+| 샘플 관리 | 샘플별 입력 JSON | `samples.tsv` 한 장으로 다환자·다샘플 일괄 |
+| CNV | cnvkit / PURPLE / Wakhan | SAVANA + Wakhan |
+| 시각화 | Severus cluster plot (HTML) | 자체 circos 스크립트(`scripts/circosplot.py`)로 SV·fusion circos |
+| 생식세포 변이 | - | Clair3 + HiPhase 페이징 결과를 함께 산출 |
+
+원본 워크플로우의 라이선스와 인용은 [HiFi-somatic-WDL 저장소](https://github.com/PacificBiosciences/HiFi-somatic-WDL)를 따른다.
+
 ---
 
 ## 특징
@@ -104,10 +131,39 @@ LONG_READ_DNA_WGS/
 | `compendium_file` | IntOGen Compendium Cancer Genes | ~1 MB |
 | `mitelman_mcgene` | Mitelman DB MCGENE 덤프 (fusion 표시용) | ~4 MB |
 
+## 입력 데이터 규모 (참고)
+
+입력은 PacBio Revio 에서 나온 **unaligned BAM (`*.hifi_reads.bam`, uBAM)** 이다. 같은 샘플이 여러 SMRT cell 로
+나뉘어 있으면 `samples.tsv` 에 줄을 여러 개 적으면 `mapping` rule 이 합쳐서 정렬한다.
+
+실제 운영 중인 유방암 코호트(WGS, 30x 내외) 기준 실측치:
+
+| 항목 | 샘플당 | 비고 |
+|---|---|---|
+| uBAM (`*.hifi_reads.bam`) | **약 200~370 GB / SMRT cell** | 종양은 보통 2 cell → 600~700 GB |
+| HiFi fastq.gz | 약 30~50 GB / cell | uBAM 이 있으면 파이프라인에 불필요 |
+| fail_reads BAM | 약 40~60 GB | 분석에 사용하지 않음 |
+| 정렬 후 haplotagged BAM | 약 240~760 GB | 파이프라인 산출물 |
+
+- 환자 1명(정상 1 + 종양 1) 기준 **입력 uBAM 만 약 1 TB**, 중간·최종 산출물까지 합치면 **2~3 TB** 의 작업 공간이 필요하다.
+- 종양이 원발+전이 2개인 환자는 입력만 1.4~1.7 TB 수준.
+- 14 샘플 코호트 실측 합계: uBAM 약 7.0 TB, 전체(raw + 납품 BAM 포함) 약 16.8 TB.
+
 ## 검증 이력
 
 유방암 long-read 코호트(정상–종양 페어 3명, 원발–전이 다중 종양 2명)에서 전 단계 완주로 검증했다.
-`TUMOR/NORMAL` 구성과 `PRIMARY/META` 구성 두 갈래로 따로 유지하던 파이프라인을 이 저장소에서 한 벌로 합쳤다.
+`TUMOR/NORMAL` 구성과 `PRIMARY/META` 구성 두 갈래로 따로 유지하던 파이프라인을 이 저장소에서 한 벌로 합쳤고,
+통합 후 Snakemake 7.32.4 dry-run 으로 두 구성 모두 DAG 가 정상 생성되는 것을 확인했다.
+
+| 구성 | samples.tsv | 생성된 job |
+|---|---|---|
+| 정상 1 + 종양 1 | `samples.example.tumor_normal.tsv` 형식 | 28 |
+| 정상 1 + 원발 + 전이 | `samples.example.multi_tumor.tsv` 형식 | 40 |
+
+```bash
+# 실제로 돌리기 전에 항상 이걸로 확인
+snakemake -n --cores 4
+```
 
 ## 알려진 이슈 / 패치 노트
 

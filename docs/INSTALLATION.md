@@ -66,14 +66,35 @@ singularity pull resource/container/tmb_calculator.sif \
   docker://quay.io/pacbio/tmb_calculator@sha256:93f89b7f2777bb27fc7e8ba5fb0b54a56c132c7b5a5b3f01b95696b5b0b3b63b
 ```
 
-Expect roughly 17 GB in total. Point a large cache directory at Singularity before pulling if `/tmp`
-is small:
+Expect roughly 17 GB in total.
+
+Build these on **node-local disk, not on a network filesystem**. Converting a Docker image to SIF
+unpacks its whole root filesystem first, which is hundreds of thousands of small files; on Lustre or
+NFS that crawls, and a large image such as `somatic_r_tools` can sit for over an hour with no
+progress and then produce a corrupt SIF. Set both variables to a local path and copy the finished
+`.sif` to shared storage afterwards:
 
 ```bash
-export SINGULARITY_CACHEDIR=$HOME/singularity_cache
-export SINGULARITY_TMPDIR=$SINGULARITY_CACHEDIR/tmp
-mkdir -p "$SINGULARITY_TMPDIR"
+LOCAL=/tmp/$USER/singularity
+export SINGULARITY_CACHEDIR=$LOCAL/cache
+export SINGULARITY_TMPDIR=$LOCAL/tmp
+mkdir -p "$SINGULARITY_CACHEDIR" "$SINGULARITY_TMPDIR"
+
+singularity pull "$LOCAL/somatic_r_tools.sif" docker://quay.io/pacbio/somatic_r_tools@sha256:...
+mv "$LOCAL/somatic_r_tools.sif" resource/container/
 ```
+
+Check each image afterwards. A truncated build still looks like a normal file, and only fails when
+a rule tries to run it:
+
+```bash
+singularity exec resource/container/chord.sif ls /opt/chord/extractSigPredictHRD.R
+singularity exec resource/container/somatic_r_tools.sif ls /app/mutational_pattern.R
+singularity exec resource/container/owl.sif owl --version
+singularity exec resource/container/tmb_calculator.sif ls /opt/venv/bin/calculate_tmb.py
+```
+
+`bad superblock for squashfs image` means the pull did not finish; delete the file and pull again.
 
 ## 4. Reference data
 

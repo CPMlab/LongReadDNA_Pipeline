@@ -98,11 +98,39 @@ results/
     └── logs/                   one log per rule invocation
 ```
 
-## Severus multimode
+## Patients with more than one tumor sample
 
-Structural variants are called once per patient with the normal as control and all tumor samples as
-targets at the same time. One VCF therefore covers primary and metastasis together, which keeps
-shared and private breakpoints directly comparable.
+`NORMAL` is the control; every other sample type is a tumor. Adding a second tumor (metastasis,
+relapse, a second biopsy) needs no configuration change — just extra rows.
+
+What changes when a patient has `NORMAL` + `PRIMARY` + `META` instead of `NORMAL` + `TUMOR`:
+
+```
+results/PT101/
+├── snv/         PT101.PRIMARY.somatic.vcf.gz      PT101.META.somatic.vcf.gz
+├── annotation/  PT101.PRIMARY.somatic.vep.vcf.gz  PT101.META.somatic.vep.vcf.gz
+├── cnv/         savana_PT101_PRIMARY/  savana_PT101_META/
+│                wakhan_PT101_PRIMARY/  wakhan_PT101_META/
+│                purple_PT101_PRIMARY/  purple_PT101_META/
+├── biomarkers/  PT101.PRIMARY_chord_prediction.txt   PT101.META_chord_prediction.txt
+│                PT101.PRIMARY.mut_sigs.tsv           PT101.META.mut_sigs.tsv
+│                PT101.PRIMARY.owl-scores.txt         PT101.META.owl-scores.txt
+│                PT101.PRIMARY.tmb_estimate.json      PT101.META.tmb_estimate.json
+├── dmr/         PT101.PRIMARY_vs_NORMAL.DMR.tsv      PT101.META_vs_NORMAL.DMR.tsv
+└── sv/          severus_PT101/            <- ONE call covering both tumors
+                 PT101.sv.annotsv_intogenCCG.tsv
+                 circos_PT101/             <- one plot per tumor + combined table
+```
+
+Everything that is tumor-specific is produced once per tumor sample. Structural variants are the
+exception: Severus runs in multimode with the normal as control and both tumors as targets, so a
+single somatic SV VCF covers the patient, with one genotype column per tumor. Shared and private
+breakpoints therefore stay directly comparable, and the circos step splits that VCF per tumor while
+also writing a combined fusion table (`<patient>_fusion_calls_combined.tsv`).
+
+If you would rather analyse the tumors completely independently, give them different `patient_id`
+values instead of different sample types — but then each one needs its own `NORMAL` row and the SVs
+are no longer called jointly.
 
 ## Adding a patient
 

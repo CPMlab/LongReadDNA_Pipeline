@@ -5,10 +5,17 @@ A Snakemake workflow for somatic cancer genome analysis from **PacBio HiFi whole
 CpG methylation and differential methylation, and clinical biomarkers (HRD, MSI, TMB,
 mutational signatures) — organised per patient.
 
-The analysis design follows PacBio's
-**[HiFi-somatic-WDL](https://github.com/PacificBiosciences/HiFi-somatic-WDL)**; this repository
-re-implements it in Snakemake for a SLURM + conda + Singularity cluster, and extends it to handle
-several tumor samples per patient (for example primary and metastasis) in a single run.
+What this workflow adds over a standard tumor/normal somatic pipeline:
+
+- **Several tumor samples per patient in one run.** Primary and metastasis (or any number of tumor
+  samples) are analysed together against the same normal, with structural variants called once
+  across all of them so shared and private events stay directly comparable.
+- **One sample sheet for a whole cohort.** Patients, sample types and BAM paths live in a single
+  TSV; the workflow derives its own wildcards from it, so nothing is hardcoded per dataset.
+- **Built for a SLURM cluster** — Snakemake, conda and Singularity, with submission scripts included.
+
+Tool choices and filtering strategy were developed with reference to PacBio's
+[HiFi-somatic-WDL](https://github.com/PacificBiosciences/HiFi-somatic-WDL).
 
 ---
 
@@ -19,6 +26,33 @@ does the rest. Every sample type other than `NORMAL` is treated as a tumor sampl
 runs a plain tumor/normal pair and a primary + metastasis patient without any change.
 
 ![workflow rulegraph](docs/figures/rulegraph.png)
+
+### How sample types flow through the workflow
+
+`NORMAL` is the control. Everything else is a tumor sample, and each stage runs at one of three
+levels:
+
+| Level | Runs | Stages |
+|---|---|---|
+| **Per sample** (normal + every tumor) | once per row group | alignment, coverage QC, Clair3 germline calling, CpG methylation |
+| **Per tumor sample** | once for each tumor | DeepSomatic, tumor phasing, VCF normalisation, VEP somatic annotation, SAVANA, Wakhan, PURPLE (Amber → Cobalt → Purple), CHORD HRD, mutational signatures, MSI, TMB, DSS differential methylation |
+| **Per patient** | once, covering all tumors at the same time | normal phasing and annotation, **Severus multimode**, SV filtering (tabix → SVpack → mate recovery), AnnotSV, IntOGen intersection, circos |
+
+So for a patient with `NORMAL` + `PRIMARY` + `META`:
+
+| Analysis | What happens |
+|---|---|
+| Alignment / coverage / germline / methylation | 3 runs — normal, primary, metastasis |
+| Somatic small variants | 2 runs — primary vs normal, metastasis vs normal |
+| **Structural variants** | **1 Severus run** with the normal as control and both tumors as targets. One somatic SV VCF holds both, with a genotype column per tumor |
+| SV annotation and circos | 1 run on that shared VCF; the circos step splits it per tumor, writing one plot per tumor plus a combined fusion table |
+| CNV / purity / ploidy | 2 runs each of SAVANA, Wakhan and PURPLE — one per tumor |
+| HRD / signatures / MSI / TMB | 2 runs each — one per tumor |
+| Differential methylation | 2 comparisons — primary vs normal, metastasis vs normal |
+
+A plain `NORMAL` + `TUMOR` pair is the same thing with one tumor, so no configuration changes are
+needed between the two cases. Tumor labels are free text: `PRIMARY`, `META`, `RELAPSE`, `TUMOR2`
+all work, and they become part of the output file names.
 
 ### Pipeline steps
 
@@ -43,9 +77,6 @@ runs a plain tumor/normal pair and a primary + metastasis patient without any ch
 | Methylation | pb-CpG-tools | `cpg_methylation` |
 | Differential methylation | DSS + annotatr | `dss_dmr`, `annotate_dmr` |
 | Visualisation | circos (bundled script) | `circosplot`, `collect_sample_circos` |
-
-Severus runs in multimode: the normal sample is the control and every tumor sample of that patient
-is analysed together, so SVs shared between primary and metastasis stay comparable.
 
 ## Quick start
 
@@ -150,8 +181,9 @@ caller (DeepSomatic only).
 
 ## Credits
 
-- Workflow design: [HiFi-somatic-WDL](https://github.com/PacificBiosciences/HiFi-somatic-WDL) (PacBio) — please
-  follow its licence and citations when using this workflow.
+- Reference workflow: [HiFi-somatic-WDL](https://github.com/PacificBiosciences/HiFi-somatic-WDL) (PacBio),
+  used as the starting point for tool selection and filtering strategy. Please follow its licence and
+  cite the tools it lists when publishing results from this workflow.
 - `scripts/svpack.py` from PacBio [svpack](https://github.com/PacificBiosciences/svpack).
 - `scripts/circosplot.py`, `scripts/DSS_tumor_normal.R`, `scripts/annotatr_dmr.R` are part of this repository.
 - IntOGen Compendium of Cancer Genes and the Mitelman Database are redistributed under their own terms and

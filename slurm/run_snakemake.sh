@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH -J snakemake_fullpower
 #SBATCH -p debug          # adjust to your cluster
-#SBATCH --nodes=3
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=96
-#SBATCH --mem=300G
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=200G
 #SBATCH -o snakemake_fullpower.o%j
 #SBATCH -e snakemake_fullpower.e%j
 
@@ -32,7 +32,7 @@ echo "Working directory: ${WORK_DIR}"
 echo "Temporary directory: ${TMP_DIR}"
 echo "Job ID: ${SLURM_JOB_ID}"
 echo "Nodes: ${SLURM_JOB_NODELIST}"
-echo "Resources: up to 384 threads and 2 TB of memory"
+echo "Resources: ${SLURM_CPUS_PER_TASK:-?} cores on ${SLURM_JOB_NODELIST:-this node}"
 echo "Heavy rules (mapping, clair3, severus) run one at a time with all threads"
 echo "Conda environment: $(conda info --envs | grep '*')"
 echo "Tool check:"
@@ -49,7 +49,7 @@ snakemake --unlock --directory ${WORK_DIR}
 echo "Starting the workflow"
 snakemake \
     --directory ${WORK_DIR} \
-    --cores "${SNAKE_CORES:-384}" \
+    --cores "${SNAKE_CORES:-${SLURM_CPUS_PER_TASK:-32}}" \
     --jobs "${SNAKE_JOBS:-10}" \
     --latency-wait 180 \
     --rerun-incomplete \

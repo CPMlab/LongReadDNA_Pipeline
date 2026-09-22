@@ -5,12 +5,12 @@ set -euo pipefail
 
 if [ $# -lt 1 ]; then
     echo "Usage: $0 PATIENT_ID [CORES]"
-    echo "Example: $0 PT001 96"
+    echo "Example: $0 PT001 32   (cores; keep within one node and your scheduler limit)"
     exit 1
 fi
 
 PATIENT_ID=$1
-CORES=${2:-96}
+CORES=${2:-32}
 SAMPLES_TSV=${SAMPLES_TSV:-samples.tsv}
 OUTPUT_DIR=${OUTPUT_DIR:-results}
 

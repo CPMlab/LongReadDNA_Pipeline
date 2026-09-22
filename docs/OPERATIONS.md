@@ -25,7 +25,7 @@ snakemake -n --cores 4
 sbatch slurm/run_snakemake.sh
 
 # Single patient
-bash slurm/run_patient.sh PT001 96
+bash slurm/run_patient.sh PT001 32
 
 # Interactive, if the session will stay alive
 bash slurm/run_snakemake.sh
@@ -38,7 +38,7 @@ bash slurm/run_snakemake.sh
 | `CONDA_ENV` | `long_read_pipeline` | conda environment to activate |
 | `SINGULARITY_CACHEDIR` | `$HOME/singularity_cache` | container cache |
 | `TMP_BASE` | `$HOME/tmp` | scratch directory for the run |
-| `SNAKE_CORES` | 384 | `--cores` |
+| `SNAKE_CORES` | `--cpus-per-task` of the job | `--cores` |
 | `SNAKE_JOBS` | 10 | `--jobs` |
 
 ## Monitoring
@@ -92,7 +92,7 @@ samples; PURPLE is usually the one to quote, with the other two as a sanity chec
 ### Out of memory
 
 ```bash
-snakemake --cores 48          # instead of 96
+snakemake --cores 16          # instead of the configured threads
 ```
 
 or lower `threads` / `threads_low` in `config.yaml`. The heavy steps are alignment, DeepSomatic,

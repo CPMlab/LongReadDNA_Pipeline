@@ -79,7 +79,7 @@ vi config.yaml                                     # reference data and containe
 
 snakemake -n --cores 4                             # dry run
 sbatch slurm/run_snakemake.sh                      # full cohort
-bash slurm/run_patient.sh PT001 96                 # one patient
+bash slurm/run_patient.sh PT001 32                 # one patient (cores)
 ```
 
 Sample sheet format:

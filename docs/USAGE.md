@@ -45,8 +45,24 @@ snakemake --configfile config.yaml --cores 48 -n
 sbatch slurm/run_snakemake.sh
 
 # One patient only (reads its sample types from samples.tsv)
-bash slurm/run_patient.sh PT101 96
+bash slurm/run_patient.sh PT101 32
 ```
+
+### Cluster resources
+
+`threads` and `threads_low` in `config.yaml` decide how large the individual jobs are. Two limits
+apply on a shared cluster, and neither produces an error message:
+
+- **Cores per node.** A job requesting more cores than any single node has stays pending forever.
+  Check with `sinfo -N -o '%N %c %m'` (SLURM) and keep `threads` at or below that number.
+- **Your own limit.** Schedulers cap what one user may hold at once (SLURM: association GrpTRES
+  or QoS; `sacctmgr show assoc user=$USER format=grptres,qos`). If the cap is smaller than
+  `threads`, the same silent wait happens. Where several QoS levels exist, submit with the one
+  that covers the job, for example `sbatch --qos=<name>`.
+
+The heavy rules are alignment, Clair3, DeepSomatic, HiPhase and Severus. Alignment and
+DeepSomatic's `make_examples` scale close to linearly with cores; HiPhase and Severus are limited
+more by I/O, so giving them every core on a node buys little.
 
 ### Running part of the workflow
 

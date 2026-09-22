@@ -20,8 +20,12 @@ savana_container: "resource/container/savana_1.3.4.sif"        # SAVANA
 wakhan_container: "resource/container/wakhan_latest.sif"        # Wakhan
 
 # Compute resources
-threads: 96                  # threads for heavy rules
-threads_low: 24              # threads for light rules
+# Keep these at or below the cores of a single compute node, and within any per-user limit
+# your scheduler enforces (SLURM QoS/association, SGE slots). A rule asking for more cores
+# than a node has will never be scheduled: the job simply waits forever without an error.
+# Raise them to match your hardware; the defaults are deliberately modest.
+threads: 32                  # threads for heavy rules (alignment, Clair3, DeepSomatic, HiPhase, Severus)
+threads_low: 8               # threads for light rules
 
 # Output directory
 output_dir: "results"        # where results are written

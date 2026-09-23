@@ -139,18 +139,15 @@ rule sv_intogen:
         tsv = join(OUTPUT_DIR, "{patient}", "sv", "{patient}.sv.annotsv_intogenCCG.tsv")
     wildcard_constraints:
         patient="[^.]+"
-    params:
-        out_dir = join(OUTPUT_DIR, "{patient}", "sv", "prioritized_output")
     threads: 1
     log:
         join(OUTPUT_DIR, "{patient}", "logs", "sv_intogen_{patient}.log")
     shell:
         """
-        mkdir -p {params.out_dir}
         
         echo "Processing SV IntOGen for: {input.annotsv_tsv}" > {log}
 
-        TEMP_NOQUOTE_TSV="{params.out_dir}/$(basename {input.annotsv_tsv})_noquote.tsv"
+        TEMP_NOQUOTE_TSV="{output.tsv}.noquote.tmp"
         
         # 1. Remove any quote from the file
         sed 's/"//g' {input.annotsv_tsv} > ${{TEMP_NOQUOTE_TSV}} 2>> {log}

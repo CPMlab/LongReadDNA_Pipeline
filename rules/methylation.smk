@@ -155,9 +155,12 @@ rule annotate_dmr:
             {threads} >> "$LOG_FILE" 2>&1
 
         # Check the result and move it into place
-        GENERATED=$(ls "$PREFIX"*.tsv.gz 2>/dev/null || true)
-        if [[ -n "$GENERATED" ]]; then
-            mv "$GENERATED" "{output.annotated_dmr}"
+        # annotatr_dmr.R writes a summary plus one file per genomic region; the summary is the
+        # rule's declared output (the per-region files stay alongside it). Copy just the summary,
+        # not a glob, or mv gets several sources and one destination and fails.
+        SUMMARY="${PREFIX}_dmr_annotation_summary.tsv.gz"
+        if [[ -s "$SUMMARY" ]]; then
+            cp "$SUMMARY" "{output.annotated_dmr}"
         else
             echo "No annotated DMR file was produced; writing an empty one." >> "$LOG_FILE"
             touch "{output.annotated_dmr}"

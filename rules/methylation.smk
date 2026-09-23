@@ -158,7 +158,7 @@ rule annotate_dmr:
         # annotatr_dmr.R writes a summary plus one file per genomic region; the summary is the
         # rule's declared output (the per-region files stay alongside it). Copy just the summary,
         # not a glob, or mv gets several sources and one destination and fails.
-        SUMMARY="${PREFIX}_dmr_annotation_summary.tsv.gz"
+        SUMMARY="${{PREFIX}}_dmr_annotation_summary.tsv.gz"
         if [[ -s "$SUMMARY" ]]; then
             cp "$SUMMARY" "{output.annotated_dmr}"
         else
